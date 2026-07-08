@@ -1,0 +1,79 @@
+# LLM 实盘配置 — DeepSeek 大脑 + 期货模拟盘
+# 继承 config_base.yaml，只覆写策略特有字段
+# 用法: python run.py -c config_llm.yaml
+#        python run.py -c config_llm.yaml --once   # 单次决策
+# 2026-06-29: 基于1000次模拟优化后的最优参数
+
+_extends: config_base.yaml
+
+data_source: akshare_futures
+start: "2024-01-01"
+end: ""  # 空=取到最新数据
+
+# ══════════════════════════════════════════════════════════════════
+#  风控参数 (1000次模拟最优)
+# ══════════════════════════════════════════════════════════════════
+risk:
+  stop_loss: 0.05        # 5% 止损 (从8%收紧到5%)
+  take_profit: 0.08      # 8% 止盈
+  trailing_stop: 0.05    # 5% 移动止损
+  max_drawdown: 0.15     # 15% 组合熔断
+
+broker:
+  name: paper               # 期货用通用模拟盘（不用cn_paper的A股规则）
+  poll_seconds: 120
+  daily_limits:
+    max_loss: 0.03
+    max_gain: 0.10
+    max_consecutive_losses: 3
+    cooldown_minutes: 30
+    max_trades_per_day: 20
+
+order_size: 0.15         # 15% 仓位 (从20%降到15%)
+
+strategy:
+  name: llm                   # LLM 策略（需要 API key）
+  provider: deepseek
+  lookback: 60
+
+# 默认标的（被symbol_pool覆盖，但需要设为期货代码让daemon识别为期货市场）
+symbol: "M0"
+
+# ══════════════════════════════════════════════════════════════════
+#  TOP 品种池 (1000次模拟验证，剔除AU和AG)
+#  分层: tier1=大仓位×1.2 | tier2=标准 | tier3=小仓位×0.8
+# ══════════════════════════════════════════════════════════════════
+symbols:
+  # ── Tier 1: acc>=75%, 高置信度 ──
+  - symbol: SI0       # 工业硅
+    direction: SELL    # 做空, 90.9% 准确率 (n=44)
+    tier: tier1
+  - symbol: IH0       # 沪深300股指
+    direction: BUY     # 做多, 85.0% 准确率 (n=20)
+    tier: tier1
+  - symbol: UR0       # 尿素
+    direction: BUY     # 做多, 81.8% 准确率 (n=22)
+    tier: tier1
+
+  # ── Tier 2: acc>=65%, 标准仓位 ──
+  - symbol: EC0       # 集运指数
+    direction: SELL    # 做空, 73.5% 准确率 (n=34)
+    tier: tier2
+  - symbol: A0        # 大豆
+    direction: BUY     # 做多, 73.3% 准确率 (n=360)
+    tier: tier2
+  - symbol: BU0       # 沥青
+    direction: BUY     # 做多, 65.0% 准确率 (n=200)
+    tier: tier2
+  - symbol: M0        # 豆粕
+    direction: SELL    # 做空, 66.3% 准确率 (n=1089)
+    tier: tier2
+
+  # ── Tier 3: acc>=60%, 小仓位 ──
+  - symbol: NI0       # 镍
+    direction: BUY     # 做多, 60.0% 准确率 (n=190)
+    tier: tier3
+
+  # ── 已剔除 (1000次模拟验证亏损) ──
+  # - symbol: AU0     # 黄金: 30%胜率, 回测亏损
+  # - symbol: AG0     # 白银: 30%胜率, 回测亏损

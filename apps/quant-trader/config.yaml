@@ -1,0 +1,36 @@
+# ============================================================
+#  A 股开箱即用配置：akshare 免费行情 + cn_paper 模拟下单
+#  继承 config_base.yaml，只覆写策略特有字段
+#  用法：
+#    回测单只   ->  quanttrader backtest -c config.yaml --symbol 600519
+#    组合回测   ->  quanttrader portfolio -c config.yaml
+#    模拟下单   ->  quanttrader trade -c config.yaml --symbol 600519 --side buy --notional 30000
+#    启动看板   ->  quanttrader serve   （或双击桌面"量化交易台"）
+# ============================================================
+
+_extends: config_base.yaml
+
+# 行情：akshare（沪深 A 股，免费、无需 token，默认前复权日线）
+data_source: akshare
+symbol: "600519"                 # 贵州茅台（也支持 sh600519 / 600519.SH）
+symbols: ["600519", "000001", "600036", "000858"]  # 茅台 / 平安银行 / 招商银行 / 五粮液
+allocation: risk_parity          # 组合资金分配：风险平价
+start: "2023-01-01"
+end:   ""  # 空=取到最新数据
+
+# 策略
+strategy:
+  name: sma_cross                # 双均线
+  fast: 20
+  slow: 60
+
+# 扫描器
+scanner:
+  top_n: 12                      # 返回候选数
+  use_ai: false                  # 启用 LLM 批量研判
+  ai_top_n: 5                    # 对前N只运行AI分析
+  ai_provider: deepseek          # deepseek / gpt / mimo
+  ai_timeout: 25                 # 单次LLM超时(秒)
+  ai_concurrency: 3              # 并发调用数
+  use_ai_score: false            # AI置信度是否叠加到最终评分
+  ai_score_weight: 10.0          # AI对score的最大影响幅度

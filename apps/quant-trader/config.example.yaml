@@ -1,0 +1,90 @@
+# Copy to config.yaml and edit. `config.yaml` is git-ignored so secrets stay local.
+
+# Symbol(s) to trade / backtest.
+#   US (yahoo):   AAPL, MSFT, SPY ...
+#   A-share (akshare): 600519 / sh600519 / 600519.SH ...
+symbol: AAPL
+
+# Multi-asset portfolio backtest (`quanttrader portfolio`). If non-empty, these
+# symbols are combined into one portfolio with capital allocation.
+symbols: []                 # e.g. [AAPL, MSFT, GOOG] or [600519, 000001]
+allocation: equal           # "equal" | "inverse_vol" | "risk_parity" | "min_variance"
+
+# Position sizing — prevent all-in (限制全仓 + 科学分配). Fractions; 1.0 = no cap.
+sizing:
+  max_position_pct: 0.30       # 单票最多占净值 30%
+  max_total_exposure: 0.80     # 总仓位(所有持仓合计)不超过 80%
+  cash_reserve_pct: 0.20       # 至少保留 20% 现金
+  max_weight_per_symbol: 0.25  # 组合中单票权重上限 25%
+  allow_leverage: false        # 禁止杠杆：任何一笔买入都不超过手头现金(默认 false)
+  target_volatility: 0.0       # 波动率目标(年化)。0=关闭；设 0.20 表示按"年化20%波动"反推仓位
+  vol_lookback: 20             # 估计已实现波动率的回看 K 线根数
+
+# Data feed:
+#   "yahoo"     - US/global data via yfinance
+#   "akshare"   - A-share (China) data, free, no token
+#   "csv"       - your own CSV file (set data_path below)
+#   "synthetic" - offline random-walk demo
+data_source: yahoo
+data_path: ""         # path to CSV when data_source: csv
+start: "2022-01-01"
+end: "2024-01-01"
+interval: "1d"        # 1d, 1h, etc. (depends on data source)
+
+# Strategy parameters. Choose one `name` and its params:
+#   sma_cross  -> fast, slow        (双均线趋势)
+#   rsi        -> period, oversold, overbought   (RSI 均值回归)
+#   bollinger  -> period, num_std   (布林带均值回归)
+#   momentum   -> lookback, trend_filter         (动量趋势跟随)
+#   ai         -> endpoint, api_key, lookback    (外部 AI 决策)
+strategy:
+  name: sma_cross
+  fast: 20
+  slow: 50
+
+# Risk management — encodes pro-trader discipline. Fractions; 0 = disabled.
+#   stop_loss     : 跌破入场价 X% 止损 (截断亏损)
+#   take_profit   : 涨过入场价 X% 止盈
+#   trailing_stop : 从最高点回落 X% 移动止损 (让利润奔跑)
+#   max_drawdown  : 组合从峰值回撤 X% 触发熔断, 清仓停手 (保住本金)
+#   risk_per_trade: 单笔最多亏总资金的 X% —— 配合 stop_loss 自动按风险定仓位
+#                   (仓位 = 净值 * risk_per_trade / stop_loss, 上不超过 order_size*现金)
+risk:
+  stop_loss: 0.08
+  take_profit: 0.0
+  trailing_stop: 0.15
+  max_drawdown: 0.25
+  risk_per_trade: 0.01
+
+# Portfolio / risk
+cash: 100000          # starting cash
+order_size: 0.25      # per-signal fraction of usable cash (capped by sizing above)
+commission: 0.0005    # per-trade commission rate (0.05%)
+slippage: 0.0005      # per-trade slippage rate
+
+# Investment horizon — auto-tunes strategy, risk, sizing (short | medium | long).
+horizon: medium
+
+# News sentiment (optional). Enable to blend headlines into backtest signals.
+news:
+  enabled: false
+  source: auto          # auto | demo | rss | akshare
+  limit: 20
+
+# Live/paper broker.
+#   name: paper      - generic in-memory simulator (US-style)
+#   name: cn_paper   - A-share simulator: 100-share lots + T+1 sell restriction
+#   name: alpaca     - real US broker API (paper or live). Free: https://alpaca.markets
+broker:
+  name: alpaca
+  paper: true                 # true = paper trading (fake money), false = real money
+  allow_live: false           # must be true (or env QT_ALLOW_LIVE=1) to route REAL-money orders
+  api_key: "YOUR_API_KEY"
+  api_secret: "YOUR_API_SECRET"
+  poll_seconds: 60            # how often the live loop checks for new signals
+# Manual order from CLI (uses broker above):
+#   quanttrader trade --side buy  --notional 5000 --symbol AAPL
+#   quanttrader trade --side sell --qty 10        --symbol AAPL
+#   quanttrader trade --side buy  --order-type limit --limit-price 180 --notional 5000 --symbol AAPL
+# Or place/track orders in the dashboard "实盘交易" tab, or via REST:
+#   POST /orders  GET /orders  DELETE /orders/{id}

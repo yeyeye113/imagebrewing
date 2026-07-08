@@ -1,0 +1,66 @@
+# ============================================================
+#  全自动交易守护进程配置
+# ============================================================
+# 用法:
+#   python -m quanttrader.daemon                     # 前台
+#   python -m quanttrader.daemon --daemon             # 后台守护
+#   python -m quanttrader.daemon --install            # 注册系统服务
+#   python -m quanttrader.daemon --status             # 查看状态
+
+# 市场类型: cn (A股) | us (美股)
+market: cn
+
+# 轮询间隔（秒）。A 股建议 120，美股可 60-120
+poll_seconds: 120
+
+# 自我修复
+auto_restart: true                 # 崩溃自动重启
+max_crash_before_cooldown: 5       # 1 小时内最多崩溃 N 次
+crash_cooldown_minutes: 30         # 超限后冷却时间
+
+# 日志
+log_dir: logs                      # 日志目录
+# state_file: daemon_state.json    # 状态文件
+
+# ── 通知推送（可选）────────────────────────────────────────
+# 企微群机器人 webhook:
+# webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+#
+# 钉钉群机器人:
+# webhook_url: "https://oapi.dingtalk.com/robot/send?access_token=xxx"
+#
+# Telegram Bot:
+# webhook_url: "https://api.telegram.org/bot<token>/sendMessage?chat_id=<id>"
+#
+webhook_url: ""                    # 留空 = 仅控制台日志
+
+# 推送哪些事件: [trade, critical, daily_summary]
+# trade = 每次买卖 | critical = 熔断/崩溃 | daily_summary = 每日收市总结
+webhook_events:
+  - trade
+  - critical
+  - daily_summary
+
+# 盘前预热 / 盘后冷却（分钟）
+pre_market_minutes: 5
+post_market_minutes: 5
+
+# ============================================================
+#  v2 增强配置
+# ============================================================
+
+# 看门狗：主循环卡死自动重启
+watchdog_enabled: true              # 是否启用看门狗
+watchdog_timeout: 600               # 主循环无响应超时（秒），超过则强制重启（须 > poll_max 以防误触发）
+
+# 配置热加载：检测 config.yaml 变化自动应用（无需重启守护进程）
+config_hot_reload: true
+
+# 自适应轮询：波动大时自动加速，平静时减频
+adaptive_poll: true
+poll_min: 30                        # 自适应轮询下限（秒）
+poll_max: 300                       # 自适应轮询上限（秒）
+
+# LLM 备用源：主源失败时自动切换
+# 例如: [mimo, gpt] — 依次尝试
+fallback_providers: []
