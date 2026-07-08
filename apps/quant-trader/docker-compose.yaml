@@ -1,0 +1,30 @@
+# quant-trader 独立部署（与游戏后端栈隔离，一键起停）
+#   构建并启动:  cd quant-trader && docker compose up -d --build
+#   看板:        http://127.0.0.1:8010/ 或 https://quant.imagebrewing.com/
+#   API 文档:    https://quant.imagebrewing.com/docs
+#   查看/停止:   docker compose logs -f  /  docker compose down
+# 注: 宿主映射用 8010 而非 8000，避免与本机 `启动量化交易台.bat` 占用的 8000 冲突；
+#     容器内部仍是 8000。要让容器独占 8000，先停掉本机服务再把下方改回 8000 即可。
+services:
+  quanttrader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: quanttrader:v3-defend
+    container_name: quanttrader
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8010:8000"   # 宿主8010→容器8000；要公网再改成 "8010:8000" 并做好鉴权
+    environment:
+      TZ: Asia/Shanghai
+      QT_API_TOKEN: ${QT_API_TOKEN:-quant-local-dev-token}
+    command: api
+    networks:
+      - lx-net
+    # 可选：挂载真实配置（需先 `cp config.example.yaml config.yaml`，否则保持注释用内置默认）
+    # volumes:
+    #   - ./config.yaml:/app/config.yaml:ro
+
+networks:
+  lx-net:
+    external: true
