@@ -1,0 +1,67 @@
+# ============================================================
+# imagebrewing - 个人项目集
+# ============================================================
+#
+# 项目结构:
+#   apps/
+#     future-sim/      - 未来模拟引擎 (React + TypeScript + Vite)
+#     quant-trader/    - 量化交易系统 (Python)
+#     quant-monitor/   - 量化监控系统 (Python + FastAPI)
+#   deploy/           - 部署配置
+#   scripts/          - 自动化脚本
+#
+# 自动化流程:
+#   Git push → GitHub Actions 构建镜像 → ghcr.io
+#   本地 watchdog 自动拉取新镜像并重启容器
+#
+# ============================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+.eggs/
+
+# Node
+node_modules/
+.pnp
+.pnp.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+
+# Docker
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# 测试
+.pytest_cache/
+htmlcov/
+.coverage
+
+# 其他
+.env.local
+.env.*.local
+*.toml.bak

@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>回测分析 · QuantTrader</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="/assets/ui-chips.js"></script>
+<script src="/assets/strategy-picker.js"></script>
+<script src="/assets/strategy-optimize.js"></script>
+<style>
+:root {
+  --bg: #080c14; --panel: #10172a; --border: #1a2744;
+  --text: #e2e6f2; --muted: #8892b0; --dim: #4a5568;
+  --green: #10b981; --red: #ef4444; --yellow: #f59e0b; --blue: #6366f1; --purple: #a855f7;
+  --cyan: #22d3ee; --orange: #f97316;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, 'Microsoft YaHei', sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, #1a1040 0%, #1e3a5f 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 24px;
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+}
+.header h1 { font-size: 20px; font-weight: 700; }
+.header h1 span { color: var(--blue); }
+.header-links { display: flex; gap: 12px; }
+.header-links a { color: var(--muted); text-decoration: none; font-size: 13px; transition: color .2s; }
+.header-links a:hover { color: var(--text); }
+
+/* Config panel */
+.config-panel {
+  background: var(--panel); border-bottom: 1px solid var(--border);
+  padding: 16px 24px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end;
+}
+.cfg-group { display: flex; flex-direction: column; gap: 4px; }
+.cfg-group-wide { min-width: 200px; }
+.cfg-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.cfg-input {
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  padding: 7px 10px; border-radius: 6px; font-size: 13px; outline: none;
+  transition: border-color .2s; min-width: 0;
+}
+.cfg-input:focus { border-color: var(--blue); }
+select.cfg-input { cursor: pointer; }
+.btn-run {
+  padding: 8px 24px; border-radius: 6px; border: none; cursor: pointer;
+  font-size: 14px; font-weight: 600; background: var(--blue); color: #fff;
+  transition: all .2s; height: 36px;
+}
+.btn-run:hover { background: #4f5ce8; }
+.btn-run:disabled { opacity: .5; cursor: not-allowed; }
+.btn-run.running { background: var(--yellow); color: #000; }
+
+/* Loading */
+.loading-bar {
+  position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 999;
+  background: linear-gradient(90deg, var(--blue), var(--purple), var(--cyan));
+  background-size: 200% 100%;
+  animation: loadShimmer 1.5s ease-in-out infinite;
+  display: none;
+}
+@keyframes loadShimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+.loading-bar.active { display: block; }
+
+/* Layout */
+.main { padding: 16px 24px; display: flex; flex-direction: column; gap: 16px; }
+
+/* Panel */
+.panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px; position: relative;
+}
+.panel-title {
+  font-size: 13px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em;
+  margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+}
+.panel-title .dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot-green { background: var(--green); }
+.dot-red { background: var(--red); }
+.dot-blue { background: var(--blue); }
+.dot-yellow { background: var(--yellow); }
+
+/* Stats cards */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.stat-card {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 14px; text-align: center; transition: border-color .2s;
+}
+.stat-card:hover { border-color: var(--blue); }
+.stat-value { font-size: 22px; font-weight: 700; margin-bottom: 2px; }
+.stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+/* Optimize mode */
+.opt-only { display: none; }
+body.mode-optimize .opt-only { display: flex; }
+body.mode-optimize .bt-only { display: none !important; }
+.opt-analysis {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; font-size: 12px; color: var(--muted); line-height: 1.5;
+}
+.opt-analysis.empty { color: var(--yellow); }
+.opt-analysis-title { font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.opt-grid-desc { font-family: ui-monospace, monospace; font-size: 11px; margin-bottom: 6px; }
+.opt-combo { font-size: 11px; margin-bottom: 8px; }
+.opt-tips { margin: 0; padding-left: 18px; }
+.opt-tips li { margin-bottom: 4px; }
+.opt-best-params { font-size: 14px; margin-bottom: 6px; }
+.opt-best-score { font-size: 12px; color: var(--muted); }
+.opt-wf-hint { font-size: 11px; color: var(--muted); margin: 10px 0; }
+.opt-wf-error { color: var(--yellow); font-size: 12px; margin-bottom: 8px; }
+.opt-best-trades { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.opt-best-trades.warn { color: var(--red); }
+tr.opt-low-trade td { color: var(--red); opacity: .85; }
+.stat-value.safe { color: var(--green); }
+.stat-value.warn { color: var(--yellow); }
+.stat-value.danger { color: var(--red); }
+.data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.data-table th, .data-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+.data-table th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; }
+.data-table code { font-size: 11px; color: var(--cyan); }
+.btn-run.optimize { background: var(--purple); }
+.btn-run.optimize:hover { background: #9333ea; }
+.applied-params-banner {
+  display: none; background: rgba(99,102,241,.12); border: 1px solid var(--blue);
+  border-radius: 8px; padding: 8px 12px; font-size: 12px; margin: 0 24px 8px;
+}
+.applied-params-banner.show { display: block; }
+.futures-hint {
+  display: none; background: rgba(245,158,11,.1); border: 1px solid var(--yellow);
+  border-radius: 8px; padding: 8px 12px; font-size: 12px; margin: 0 24px 8px; color: var(--muted);
+}
+.futures-hint.show { display: block; }
+.positive { color: var(--green); }
+.negative { color: var(--red); }
+.neutral { color: var(--yellow); }
+
+/* Chart containers */
+.chart-row { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.chart-box { position: relative; height: 320px; }
+.chart-box canvas { width: 100% !important; height: 100% !important; }
+
+/* Trades table */
+.table-wrap { overflow-x: auto; }
+table {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+}
+thead th {
+  text-align: left; padding: 8px 10px; border-bottom: 2px solid var(--border);
+  color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+  white-space: nowrap; cursor: pointer; user-select: none;
+}
+thead th:hover { color: var(--text); }
+tbody td {
+  padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+tbody tr:hover { background: rgba(99,102,241,.08); }
+.side-buy { color: var(--green); font-weight: 600; }
+.side-sell { color: var(--red); font-weight: 600; }
+
+/* Heatmap */
+.heatmap-wrap { overflow-x: auto; }
+.heatmap { display: inline-block; }
+.heatmap table { font-size: 12px; }
+.heatmap th, .heatmap td {
+  padding: 6px 10px; text-align: center; min-width: 60px; border: 1px solid var(--border);
+}
+.heatmap th { background: var(--bg); color: var(--muted); font-weight: 600; }
+.heatmap td { font-weight: 600; border-radius: 2px; }
+
+/* Position timeline */
+.timeline-wrap { height: 200px; position: relative; }
+
+/* Empty state */
+.empty-state {
+  text-align: center; padding: 48px 24px; color: var(--muted);
+}
+.empty-state svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: .4; }
+.empty-state p { font-size: 14px; }
+
+/* Risk tips */
+.tip-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.tip-item {
+  display: flex; align-items: flex-start; gap: 8px; font-size: 13px;
+  padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border);
+}
+.tip-item.good { border-color: rgba(16,185,129,.3); background: rgba(16,185,129,.05); }
+.tip-item.warn { border-color: rgba(245,158,11,.3); background: rgba(245,158,11,.05); }
+.tip-item.info { border-color: rgba(99,102,241,.3); background: rgba(99,102,241,.05); }
+.tip-icon { font-size: 14px; flex-shrink: 0; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .main { padding: 12px; }
+  .config-panel { padding: 12px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .chart-box { height: 260px; }
+}
+</style>
+</head>
+<body>
+
+<div class="loading-bar" id="loadingBar"></div>
+
+<div class="header">
+  <h1><span>&#9670;</span> 回测分析</h1>
+  <div class="header-links">
+    <a href="/">首页</a>
+    <a href="/scanner">选股</a>
+    <a href="/replay">回放</a>
+    <a href="/futures">期货</a>
+    <a href="/docs">API</a>
+  </div>
+</div>
+
+<!-- Parameter config panel -->
+<div class="config-panel">
+  <div class="cfg-group">
+    <label class="cfg-label">模式</label>
+    <div id="mode-chips"></div>
+  </div>
+  <div class="cfg-group cfg-group-wide">
+    <label class="cfg-label">标的代码</label>
+    <div id="sym-presets" style="margin-bottom:6px"></div>
+    <input class="cfg-input" id="sym" value="DEMO" style="width:100px" />
+  </div>
+  <div class="cfg-group">
+    <label class="cfg-label">数据源</label>
+    <div id="src-chips"></div>
+  </div>
+  <div class="cfg-group cfg-group-wide">
+    <label class="cfg-label">策略分组</label>
+    <div id="strat-group-chips"></div>
+  </div>
+  <div class="cfg-group cfg-group-wide">
+    <label class="cfg-label">策略</label>
+    <div id="strat-chips"></div>
+  </div>
+  <div class="cfg-group cfg-group-wide opt-only" id="opt-metric-group">
+    <label class="cfg-label">优化指标</label>
+    <div id="metric-chips"></div>
+  </div>
+  <div class="cfg-group opt-only" id="opt-splits-group">
+    <label class="cfg-label">WF 折数</label>
+    <div id="splits-chips"></div>
+  </div>
+  <div class="cfg-group">
+    <label class="cfg-label">开始日期</label>
+    <input class="cfg-input" type="date" id="startDate" value="2022-01-01" style="width:140px" />
+  </div>
+  <div class="cfg-group">
+    <label class="cfg-label">结束日期</label>
+    <input class="cfg-input" type="date" id="endDate" value="2024-01-01" style="width:140px" />
+  </div>
+  <div class="cfg-group bt-only" id="engine-group">
+    <label class="cfg-label">回测引擎</label>
+    <div id="engine-chips"></div>
+  </div>
+  <div class="cfg-group">
+    <label class="cfg-label">初始资金</label>
+    <input class="cfg-input" type="number" id="cash" value="100000" step="10000" style="width:110px" />
+  </div>
+  <div class="cfg-group">
+    <label class="cfg-label">仓位比例</label>
+    <input class="cfg-input" type="number" id="orderSize" value="0.25" step="0.05" min="0.05" max="1" style="width:80px" />
+  </div>
+  <div class="cfg-group">
+    <label class="cfg-label">周期</label>
+    <div id="interval-chips"></div>
+  </div>
+  <div class="cfg-group" style="align-self:flex-end">
+    <button class="btn-run" id="btnRun" onclick="handleRun()">&#9654; 运行回测</button>
+  </div>
+</div>
+
+<div class="applied-params-banner" id="appliedBanner"></div>
+<div class="futures-hint" id="futuresHint">
+  <strong>趋势跟随</strong> 支持做空腿；当前为<strong>股票多头引擎</strong>，只会执行做多部分。
+  请切换上方「回测引擎 → 期货双向」以查看完整 CTA 绩效（含做空占比）。
+</div>
+
+<!-- 策略优化分析（参数优化模式） -->
+<div class="main opt-only" id="optAnalysisWrap" style="display:none;padding-top:0">
+  <div id="opt-analysis-panel"></div>
+</div>
+
+<div class="main">
+
+  <!-- Empty state -->
+  <div class="empty-state" id="emptyState">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M3 3v18h18"/><path d="M7 16l4-8 4 5 5-9"/>
+    </svg>
+    <p>点击「运行回测」查看策略绩效分析</p>
+  </div>
+
+  <!-- Results container (hidden initially) -->
+  <div id="results" style="display:none">
+
+    <!-- Performance stats -->
+    <div class="panel">
+      <div class="panel-title"><div class="dot dot-green"></div>绩效概览</div>
+      <div class="stats-grid" id="statsGrid"></div>
+    </div>
+
+    <!-- Equity curve + buy & hold -->
+    <div class="panel">
+      <div class="panel-title"><div class="dot dot-blue"></div>资金曲线</div>
+      <div class="chart-box"><canvas id="equityChart"></canvas></div>
+    </div>
+
+    <!-- Monthly heatmap -->
+    <div class="panel">
+      <div class="panel-title"><div class="dot dot-yellow"></div>月度收益</div>
+      <div class="heatmap-wrap" id="heatmapWrap"></div>
+    </div>
+
+    <!-- Position timeline -->
+    <div class="panel">
+      <div class="panel-title"><div class="dot dot-purple"></div>持仓变化</div>
+      <div class="timeline-wrap"><canvas id="positionChart"></canvas></div>
+    </div>
+
+    <!-- Trade records -->
+    <div class="panel">
+      <div class="panel-title"><div class="dot dot-green"></div>交易记录</div>
+      <div class="table-wrap" id="tradesWrap"></div>
+    </div>
+
+    <!-- Tips -->
+    <div class="panel" id="tipsPanel" style="display:none">
+      <div class="panel-title"><div class="dot dot-yellow"></div>AI建议</div>
+      <ul class="tip-list" id="tipList"></ul>
+    </div>
+
+  </div>
+
+  <!-- 参数优化结果 -->
+  <div id="optimizeResults" style="display:none"></div>
+
+</div>
+
+<script>
+const API = '';
+let equityChart = null;
+let positionChart = null;
+let pageMode = 'backtest';
+let appliedStrategyParams = {};
+
+function syncFuturesHint() {
+  var hint = document.getElementById('futuresHint');
+  var show = pageMode === 'backtest'
+    && StrategyPicker.getValue() === 'trend_follow'
+    && (ChipSelect.getValue('engine-chips') || 'equity') === 'equity';
+  hint.classList.toggle('show', show);
+}
+
+function enginePayload() {
+  var engine = ChipSelect.getValue('engine-chips') || 'equity';
+  return {
+    engine: engine,
+    futures: { leverage: 1.0, cost: 0.0003 },
+  };
+}
+
+function onBacktestStrategyChange(v) {
+  if (v === 'trend_follow') {
+    ChipSelect.setValue('engine-chips', 'futures', true);
+  }
+  syncFuturesHint();
+}
+
+function showAppliedBanner(params, strategy) {
+  var el = document.getElementById('appliedBanner');
+  if (!params || !Object.keys(params).length) {
+    el.classList.remove('show');
+    el.textContent = '';
+    return;
+  }
+  var txt = Object.keys(params).map(function (k) { return k + '=' + params[k]; }).join(' · ');
+  el.textContent = '已应用优化参数 [' + strategy + ']: ' + txt;
+  el.classList.add('show');
+}
+
+function applyOptimizedParams() {
+  var data = StrategyOptimize.getLastResult();
+  if (!data || !data.best_params) {
+    alert('无可用优化结果');
+    return;
+  }
+  appliedStrategyParams = data.best_params;
+  StrategyPicker.setValue(data.strategy);
+  showAppliedBanner(appliedStrategyParams, data.strategy);
+  ChipSelect.setValue('mode-chips', 'backtest', true);
+  setPageMode('backtest');
+  runBacktest();
+}
+
+function showLoading(on, mode) {
+  mode = mode || pageMode;
+  document.getElementById('loadingBar').classList.toggle('active', on);
+  const btn = document.getElementById('btnRun');
+  btn.disabled = on;
+  btn.classList.toggle('running', on);
+  btn.classList.toggle('optimize', mode === 'optimize');
+  if (mode === 'optimize') {
+    btn.textContent = on ? '优化中...' : '▶ 运行优化';
+  } else {
+    btn.textContent = on ? '回测中...' : '▶ 运行回测';
+  }
+}
+
+function handleRun() {
+  if (pageMode === 'optimize') runOptimize();
+  else runBacktest();
+}
+
+function setPageMode(mode) {
+  pageMode = mode;
+  document.body.classList.toggle('mode-optimize', mode === 'optimize');
+  var analysisWrap = document.getElementById('optAnalysisWrap');
+  var empty = document.getElementById('emptyState');
+  var results = document.getElementById('results');
+  var optRes = document.getElementById('optimizeResults');
+  showLoading(false, mode);
+  if (mode === 'optimize') {
+    analysisWrap.style.display = '';
+    document.getElementById('futuresHint').classList.remove('show');
+    empty.querySelector('p').textContent = '选择可优化策略后点击「运行优化」，查看网格搜索与 Walk-Forward 分析';
+    empty.style.display = optRes.innerHTML ? 'none' : '';
+    results.style.display = 'none';
+    optRes.style.display = optRes.innerHTML ? '' : 'none';
+    mountOptimizeStrategies();
+    StrategyOptimize.renderAnalysis('opt-analysis-panel', StrategyPicker.getValue());
+  } else {
+    analysisWrap.style.display = 'none';
+    optRes.style.display = 'none';
+    empty.querySelector('p').textContent = '点击「运行回测」查看策略绩效分析';
+    mountBacktestStrategies();
+    if (!results.innerHTML || results.style.display === 'none') {
+      empty.style.display = '';
+    }
+  }
+}
+
+function mountBacktestStrategies() {
+  StrategyPicker.mount('strat-chips', 'strat-group-chips', {
+    defaultGroup: 'classic',
+    defaultStrategy: 'sma_cross',
+    onStrategyChange: onBacktestStrategyChange,
+  });
+  syncFuturesHint();
+}
+
+function mountOptimizeStrategies() {
+  var groups = StrategyOptimize.buildPickerGroups();
+  if (!groups) return;
+  StrategyPicker.mount('strat-chips', 'strat-group-chips', {
+    defaultGroup: Object.keys(groups)[0],
+    defaultStrategy: 'sma_cross',
+    groups: groups,
+    onStrategyChange: function (v) {
+      StrategyOptimize.renderAnalysis('opt-analysis-panel', v);
+    },
+  });
+}
+
+async function runOptimize() {
+  var strategy = StrategyPicker.getValue();
+  if (!StrategyOptimize.isOptimizable(strategy)) {
+    alert('当前策略不支持网格优化，请选择经典/技术/均值回归类策略');
+    return;
+  }
+  var metric = ChipSelect.getValue('metric-chips') || 'sharpe';
+  var body = {
+    symbol: document.getElementById('sym').value.toUpperCase(),
+    source: ChipSelect.getValue('src-chips'),
+    strategy: strategy,
+    metric: metric,
+    n_splits: parseInt(ChipSelect.getValue('splits-chips') || '4', 10),
+    start: document.getElementById('startDate').value,
+    end: document.getElementById('endDate').value,
+    cash: parseFloat(document.getElementById('cash').value) || 100000,
+    interval: ChipSelect.getValue('interval-chips'),
+    ...enginePayload(),
+  };
+
+  showLoading(true, 'optimize');
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('optimizeResults').style.display = 'none';
+
+  try {
+    const res = await fetch(API + '/optimize', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || res.statusText); }
+    const data = await res.json();
+    StrategyOptimize.renderOptimizeResults('optimizeResults', data, metric);
+    document.getElementById('optimizeResults').style.display = '';
+  } catch (err) {
+    alert('参数优化失败: ' + err.message);
+    document.getElementById('emptyState').style.display = '';
+  } finally {
+    showLoading(false, 'optimize');
+  }
+}
+
+function fmt(v, d=2) { return v == null ? '-' : (v * 100).toFixed(d) + '%'; }
+function fmtNum(v, d=0) { return v == null ? '-' : Number(v).toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d}); }
+function fmtDate(s) { return s ? s.slice(0,10) : s; }
+function cls(v) { return v > 0 ? 'positive' : v < 0 ? 'negative' : 'neutral'; }
+
+// --- Run backtest ---
+async function runBacktest() {
+  const body = {
+    symbol: document.getElementById('sym').value.toUpperCase(),
+    source: ChipSelect.getValue('src-chips'),
+    strategy: StrategyPicker.getValue(),
+    params: appliedStrategyParams,
+    start: document.getElementById('startDate').value,
+    end: document.getElementById('endDate').value,
+    cash: parseFloat(document.getElementById('cash').value) || 100000,
+    order_size: parseFloat(document.getElementById('orderSize').value) || 0.25,
+    interval: ChipSelect.getValue('interval-chips'),
+    commission: 0.0005,
+    slippage: 0.0005,
+    apply_horizon_preset: false,
+    ...enginePayload(),
+  };
+
+  showLoading(true, 'backtest');
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('results').style.display = 'none';
+
+  try {
+    const res = await fetch(API + '/backtest', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || res.statusText); }
+    const data = await res.json();
+    renderResults(data, body);
+  } catch (err) {
+    alert('回测失败: ' + err.message);
+    document.getElementById('emptyState').style.display = '';
+  } finally {
+    showLoading(false, 'backtest');
+  }
+}
+
+// --- Render all ---
+function renderResults(d, req) {
+  document.getElementById('results').style.display = '';
+  renderStats(d, req);
+  renderEquityChart(d);
+  renderHeatmap(d);
+  renderPositionChart(d);
+  renderTrades(d.fills || []);
+  renderTips(d.tips || []);
+}
+
+// --- Stats cards ---
+function renderStats(d, req) {
+  const s = d.stats || {};
+  const ret = s.total_return || 0;
+  const dd = s.max_drawdown || 0;
+  const bh = d.buy_and_hold || 0;
+  const bhDiff = ret - bh;
+  const wr = s.win_rate != null ? s.win_rate : (d.fills ? calcWinRate(d.fills) : null);
+
+  const cards = [
+    { label: '总收益', value: fmt(ret), cls: cls(ret), sub: 'Buy&Hold: ' + fmt(bh) },
+    { label: '年化收益', value: fmt(s.cagr || 0), cls: cls(s.cagr) },
+    { label: '夏普比率', value: (s.sharpe || 0).toFixed(2), cls: cls(s.sharpe - 1) },
+    { label: '索提诺', value: (s.sortino || 0).toFixed(2), cls: cls(s.sortino - 1) },
+    { label: '最大回撤', value: fmt(dd), cls: 'negative' },
+    { label: '年化波动', value: fmt(s.annual_vol || 0), cls: 'neutral' },
+    { label: '交易次数', value: d.n_trades, cls: '', sub: d.risk_events + ' 风控事件' },
+    { label: '胜率', value: wr != null ? fmt(wr) : '-', cls: cls(wr - 0.5) },
+    { label: '超额收益', value: fmt(bhDiff), cls: cls(bhDiff), sub: '策略 vs 持有' },
+  ];
+
+  document.getElementById('statsGrid').innerHTML = cards.map(c => `
+    <div class="stat-card">
+      <div class="stat-value ${c.cls || ''}">${c.value}</div>
+      <div class="stat-label">${c.label}</div>
+      ${c.sub ? `<div class="stat-sub">${c.sub}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function calcWinRate(fills) {
+  let wins = 0, total = 0;
+  let buyPrice = null;
+  for (const f of fills) {
+    if (f.side === 'BUY') { buyPrice = f.price; }
+    else if (f.side === 'SELL' && buyPrice != null) {
+      total++;
+      if (f.price > buyPrice) wins++;
+      buyPrice = null;
+    }
+  }
+  return total > 0 ? wins / total : null;
+}
+
+// --- Equity curve chart ---
+function renderEquityChart(d) {
+  const curve = d.equity_curve || [];
+  const labels = curve.map(p => p.time.slice(0,10));
+  const equities = curve.map(p => p.equity);
+
+  // Compute buy-and-hold line
+  const cash = equities[0] || 100000;
+  const startPrice = equities[0] / (1 + (d.buy_and_hold || 0)); // approximate
+  const bhLine = equities.map((_, i) => cash * (1 + (d.buy_and_hold || 0) * i / Math.max(equities.length - 1, 1)));
+
+  // Normalize both to 0-100%
+  const baseEq = equities[0] || 1;
+  const eqPct = equities.map(v => (v / baseEq - 1) * 100);
+  const bhPct = bhLine.map((_, i) => (bhLine[i] / baseEq - 1) * 100);
+
+  // Monthly x-axis labels (show one per ~20 bars)
+  const monthLabels = labels.map((l, i) => {
+    const prev = i > 0 ? labels[i-1] : '';
+    return l.slice(0,7) !== prev.slice(0,7) ? l : '';
+  });
+
+  if (equityChart) equityChart.destroy();
+  equityChart = new Chart(document.getElementById('equityChart'), {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: '策略净值 %',
+          data: eqPct,
+          borderColor: '#6366f1',
+          backgroundColor: 'rgba(99,102,241,.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 0,
+          borderWidth: 2,
+        },
+        {
+          label: 'Buy & Hold %',
+          data: bhPct,
+          borderColor: '#8892b0',
+          borderDash: [5, 3],
+          fill: false,
+          tension: 0.3,
+          pointRadius: 0,
+          borderWidth: 1.5,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#8892b0', font: { size: 12 } } },
+        tooltip: {
+          backgroundColor: '#10172a',
+          titleColor: '#e2e6f2',
+          bodyColor: '#e2e6f2',
+          borderColor: '#1a2744',
+          borderWidth: 1,
+          callbacks: {
+            label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + '%'
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(26,39,68,.5)' },
+          ticks: {
+            color: '#8892b0', font: { size: 11 },
+            maxTicksLimit: 12,
+            callback: function(val, idx) {
+              const l = this.getLabelForValue(val);
+              return monthLabels[idx] ? monthLabels[idx].slice(2) : '';
+            }
+          }
+        },
+        y: {
+          grid: { color: 'rgba(26,39,68,.5)' },
+          ticks: {
+            color: '#8892b0', font: { size: 11 },
+            callback: v => v.toFixed(1) + '%'
+          }
+        }
+      }
+    }
+  });
+}
+
+// --- Monthly heatmap ---
+function renderHeatmap(d) {
+  const curve = d.equity_curve || [];
+  if (curve.length < 2) { document.getElementById('heatmapWrap').innerHTML = '<div style="color:var(--muted)">数据不足</div>'; return; }
+
+  // Compute monthly returns
+  const monthly = {};
+  for (let i = 1; i < curve.length; i++) {
+    const key = curve[i].time.slice(0, 7); // YYYY-MM
+    const prev = curve[i-1].equity;
+    const cur = curve[i].equity;
+    if (!monthly[key]) monthly[key] = { start: prev, end: cur };
+    monthly[key].end = cur;
+  }
+
+  // Build year x month grid
+  const years = [...new Set(Object.keys(monthly).map(k => k.slice(0,4)))].sort();
+  const months = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+  const monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+  let html = '<table><thead><tr><th>年份</th>';
+  monthNames.forEach(m => html += `<th>${m}</th>`);
+  html += '<th>年度</th></tr></thead><tbody>';
+
+  years.forEach(y => {
+    html += `<tr><th>${y}</th>`;
+    let yearStart = null, yearEnd = null;
+    months.forEach(m => {
+      const key = `${y}-${m}`;
+      const data = monthly[key];
+      if (data) {
+        const ret = data.end / (yearStart != null ? yearStart : data.start) - 1;
+        if (yearStart == null) yearStart = data.start;
+        yearEnd = data.end;
+        const pct = (ret * 100).toFixed(1);
+        const bg = ret > 0 ? `rgba(16,185,129,${Math.min(Math.abs(ret)*5, 0.6)})`
+                  : ret < 0 ? `rgba(239,68,68,${Math.min(Math.abs(ret)*5, 0.6)})`
+                  : 'transparent';
+        const clr = ret > 0 ? 'var(--green)' : ret < 0 ? 'var(--red)' : 'var(--muted)';
+        html += `<td style="background:${bg};color:${clr}">${pct}%</td>`;
+      } else {
+        html += '<td>-</td>';
+      }
+    });
+    if (yearStart != null && yearEnd != null) {
+      const yr = ((yearEnd / yearStart - 1) * 100).toFixed(1);
+      const yrCls = cls(parseFloat(yr));
+      html += `<td class="${yrCls}" style="font-weight:700">${yr}%</td>`;
+    } else {
+      html += '<td>-</td>';
+    }
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('heatmapWrap').innerHTML = html;
+}
+
+// --- Position chart (fill events) ---
+function renderPositionChart(d) {
+  const fills = d.fills || [];
+  if (fills.length === 0) {
+    document.getElementById('positionChart').parentElement.innerHTML = '<div style="color:var(--muted);text-align:center;padding:24px">无交易记录</div>';
+    return;
+  }
+
+  // Track position over time
+  const labels = [];
+  const positions = [];
+  const buySells = [];
+  let pos = 0;
+  fills.forEach(f => {
+    const t = f.time.slice(0, 10);
+    if (f.side === 'BUY') { pos += Math.abs(f.qty); }
+    else { pos -= Math.abs(f.qty); }
+    labels.push(t);
+    positions.push(pos);
+    buySells.push(f.side === 'BUY' ? Math.abs(f.qty) : -Math.abs(f.qty));
+  });
+
+  if (positionChart) positionChart.destroy();
+  positionChart = new Chart(document.getElementById('positionChart'), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: '持仓量',
+          data: positions,
+          type: 'line',
+          borderColor: '#a855f7',
+          backgroundColor: 'rgba(168,85,247,.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 2,
+          borderWidth: 2,
+          yAxisID: 'y1',
+          order: 0,
+        },
+        {
+          label: '买卖',
+          data: buySells,
+          backgroundColor: buySells.map(v => v > 0 ? 'rgba(16,185,129,.6)' : 'rgba(239,68,68,.6)'),
+          borderColor: buySells.map(v => v > 0 ? '#10b981' : '#ef4444'),
+          borderWidth: 1,
+          yAxisID: 'y',
+          order: 1,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#8892b0', font: { size: 12 } } },
+        tooltip: { backgroundColor: '#10172a', titleColor: '#e2e6f2', bodyColor: '#e2e6f2', borderColor: '#1a2744', borderWidth: 1 }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(26,39,68,.5)' },
+          ticks: { color: '#8892b0', font: { size: 11 }, maxTicksLimit: 15 }
+        },
+        y: {
+          position: 'left',
+          grid: { color: 'rgba(26,39,68,.5)' },
+          ticks: { color: '#8892b0', font: { size: 11 } },
+          title: { display: true, text: '交易量', color: '#8892b0' }
+        },
+        y1: {
+          position: 'right',
+          grid: { drawOnChartArea: false },
+          ticks: { color: '#8892b0', font: { size: 11 } },
+          title: { display: true, text: '持仓', color: '#8892b0' }
+        }
+      }
+    }
+  });
+}
+
+// --- Trades table ---
+function renderTrades(fills) {
+  if (!fills.length) {
+    document.getElementById('tradesWrap').innerHTML = '<div style="color:var(--muted)">无交易记录</div>';
+    return;
+  }
+
+  let html = '<table><thead><tr>';
+  html += '<th>#</th><th>时间</th><th>标的</th><th>方向</th><th>数量</th><th>价格</th><th>成本</th>';
+  html += '</tr></thead><tbody>';
+  fills.forEach((f, i) => {
+    const sideCls = f.side === 'BUY' ? 'side-buy' : 'side-sell';
+    const sideLabel = f.side === 'BUY' ? '买入' : '卖出';
+    html += `<tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td>${fmtDate(f.time)}</td>
+      <td>${f.symbol}</td>
+      <td class="${sideCls}">${sideLabel}</td>
+      <td>${fmtNum(f.qty, 0)}</td>
+      <td>${f.price.toFixed(2)}</td>
+      <td>${f.cost.toFixed(2)}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('tradesWrap').innerHTML = html;
+}
+
+// --- Tips ---
+function renderTips(tips) {
+  const panel = document.getElementById('tipsPanel');
+  if (!tips.length) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  const icons = { good: '✅', warn: '⚠️', info: 'ℹ️' };
+  document.getElementById('tipList').innerHTML = tips.map(t =>
+    `<li class="tip-item ${t.level || 'info'}"><span class="tip-icon">${icons[t.level] || icons.info}</span><span>${t.message}</span></li>`
+  ).join('');
+}
+
+// Chip 选择面初始化
+ChipSelect.mount('src-chips', [
+  { value: 'synthetic', label: 'Synthetic' },
+  { value: 'sina', label: 'Sina' },
+], { value: 'synthetic', compact: true });
+
+ChipSelect.mount('interval-chips', [
+  { value: '1d', label: '日线' },
+  { value: '1w', label: '周线' },
+], { value: '1d', compact: true });
+
+ChipSelect.mount('engine-chips', [
+  { value: 'equity', label: '股票多头' },
+  { value: 'futures', label: '期货双向' },
+], { value: 'equity', compact: true, onChange: syncFuturesHint });
+
+ChipSelect.mount('mode-chips', [
+  { value: 'backtest', label: '单次回测' },
+  { value: 'optimize', label: '参数优化' },
+], { value: 'backtest', compact: true, onChange: setPageMode });
+
+ChipSelect.mount('metric-chips', [
+  { value: 'sharpe', label: '夏普' },
+  { value: 'total_return', label: '总收益' },
+  { value: 'sortino', label: '索提诺' },
+  { value: 'cagr', label: '年化' },
+], { value: 'sharpe', compact: true, wrap: true });
+
+ChipSelect.mount('splits-chips', [
+  { value: '3', label: '3折' },
+  { value: '4', label: '4折' },
+  { value: '5', label: '5折' },
+], { value: '4', compact: true });
+
+StrategyOptimize.fetchCatalog(API).then(function () {
+  mountBacktestStrategies();
+}).catch(function () {
+  mountBacktestStrategies();
+});
+
+var SYM_PRESETS = [
+  { value: 'DEMO', label: 'DEMO' },
+  { value: '600519', label: '茅台' },
+  { value: '000001', label: '平安' },
+  { value: 'RB0', label: '螺纹 RB0' },
+  { value: 'M0', label: '豆粕 M0' },
+  { value: 'I0', label: '铁矿 I0' },
+];
+
+function applySymPreset(code) {
+  document.getElementById('sym').value = code;
+  if (/0$/.test(code) && ChipSelect.getValue('src-chips') === 'synthetic') {
+    ChipSelect.setValue('src-chips', 'akshare');
+  }
+}
+
+ChipSelect.mount('sym-presets', SYM_PRESETS, {
+  value: 'DEMO',
+  compact: true,
+  wrap: true,
+  onChange: applySymPreset,
+});
+
+document.getElementById('sym').addEventListener('change', function () {
+  var v = this.value.toUpperCase();
+  this.value = v;
+  if (SYM_PRESETS.some(function (p) { return p.value === v; })) {
+    ChipSelect.setValue('sym-presets', v, true);
+  }
+});
+
+// Keyboard shortcut: Enter to run
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') handleRun();
+});
+</script>
+</body>
+</html>

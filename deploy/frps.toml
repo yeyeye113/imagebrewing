@@ -1,0 +1,13 @@
+# ============================================================
+# frps (VPS端) 配置模板
+# ============================================================
+
+[common]
+bind_port = 7000
+vhost_http_port = 80
+vhost_http_port = 443
+dashboard_port = 7500
+token = "{{ .Envs.FRP_AUTH_TOKEN }}"
+
+# HTTP 路由
+subdomain_host = liangquan.com

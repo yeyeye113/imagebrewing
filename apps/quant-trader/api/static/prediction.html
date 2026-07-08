@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 预测完整性 · Quant Trader</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="/assets/ui-chips.js"></script>
+<style>
+:root{--bg:#080c14;--panel:#10172a;--border:#1a2744;--text:#e2e6f2;--muted:#8892b0;--green:#10b981;--red:#ef4444;--yellow:#f59e0b;--blue:#6366f1;--purple:#a855f7;--radius:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,'Microsoft YaHei',sans-serif;line-height:1.5}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* Header */
+.header{background:var(--panel);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:100}
+.header h1{font-size:18px;font-weight:600;background:linear-gradient(135deg,var(--blue),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header .controls{display:flex;gap:8px;margin-left:auto;align-items:center;flex-wrap:wrap}
+.header button{background:var(--blue);color:#fff;border:none;padding:6px 16px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500}
+.header button:hover{opacity:0.9}
+.header button.secondary{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.dir-badge{font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;border:1px solid var(--border)}
+.dir-badge.long{color:var(--green);border-color:var(--green);background:rgba(16,185,129,.12)}
+.dir-badge.short{color:var(--red);border-color:var(--red);background:rgba(239,68,68,.12)}
+.dir-badge.neutral{color:var(--yellow);border-color:var(--yellow);background:rgba(245,158,11,.12)}
+
+/* Priority Bar */
+.priority-bar{background:var(--panel);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.priority-bar .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-right:4px}
+.priority-chip{font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);color:var(--muted);white-space:nowrap}
+.priority-chip.active{border-color:var(--green);color:var(--green);background:rgba(16,185,129,0.1)}
+.priority-chip.warn{border-color:var(--yellow);color:var(--yellow);background:rgba(245,158,11,0.1)}
+.priority-chip.danger{border-color:var(--red);color:var(--red);background:rgba(239,68,68,0.1)}
+
+/* Score Banner */
+.score-banner{margin:16px 24px;padding:16px 20px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;gap:20px}
+.score-circle{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;flex-shrink:0}
+.score-circle.grade-A{border:3px solid var(--green);color:var(--green)}
+.score-circle.grade-B{border:3px solid var(--blue);color:var(--blue)}
+.score-circle.grade-C{border:3px solid var(--yellow);color:var(--yellow)}
+.score-circle.grade-D{border:3px solid var(--red);color:var(--red)}
+.score-detail{flex:1}
+.score-detail .title{font-size:14px;font-weight:600;margin-bottom:4px}
+.score-detail .warnings{display:flex;gap:6px;flex-wrap:wrap}
+.score-detail .warnings span{font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(239,68,68,0.1);color:var(--red)}
+
+/* Grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:16px;padding:0 24px 24px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:20px;overflow:hidden}
+.card.full{grid-column:1/-1}
+.card h2{font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card h2 .tag{font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(99,102,241,0.15);color:var(--blue);font-weight:500}
+
+/* Direction */
+.dir-bars{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.dir-row{display:flex;align-items:center;gap:10px}
+.dir-label{width:50px;font-size:12px;color:var(--muted);text-align:right}
+.dir-track{flex:1;height:24px;background:var(--bg);border-radius:4px;overflow:hidden;position:relative}
+.dir-fill{height:100%;border-radius:4px;transition:width 0.5s}
+.dir-fill.long{background:linear-gradient(90deg,rgba(16,185,129,0.3),var(--green))}
+.dir-fill.short{background:linear-gradient(90deg,rgba(239,68,68,0.3),var(--red))}
+.dir-fill.neutral{background:linear-gradient(90deg,rgba(245,158,11,0.3),var(--yellow))}
+.dir-val{width:45px;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.dir-sources{margin-top:12px;display:flex;gap:6px;flex-wrap:wrap}
+.dir-source{font-size:11px;padding:3px 8px;border-radius:4px;background:var(--bg);border:1px solid var(--border)}
+.dir-source.long{border-color:var(--green);color:var(--green)}
+.dir-source.short{border-color:var(--red);color:var(--red)}
+.dir-source.neutral{border-color:var(--yellow);color:var(--yellow)}
+
+/* Regime */
+.regime-badge{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;font-size:15px;font-weight:600;margin-bottom:12px}
+.regime-badge.trending{background:rgba(16,185,129,0.15);color:var(--green);border:1px solid rgba(16,185,129,0.3)}
+.regime-badge.ranging{background:rgba(245,158,11,0.15);color:var(--yellow);border:1px solid rgba(245,158,11,0.3)}
+.regime-badge.volatile,.regime-badge.anomaly{background:rgba(239,68,68,0.15);color:var(--red);border:1px solid rgba(239,68,68,0.3)}
+.regime-badge.low_volatility{background:rgba(99,102,241,0.15);color:var(--blue);border:1px solid rgba(99,102,241,0.3)}
+.regime-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.regime-stat{text-align:center;padding:8px;background:var(--bg);border-radius:6px}
+.regime-stat .val{font-size:18px;font-weight:700}
+.regime-stat .lbl{font-size:10px;color:var(--muted);text-transform:uppercase}
+.risk-hint{margin-top:12px;padding:10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font-size:12px;color:var(--yellow)}
+
+/* Model Cards */
+.model-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:8px}
+.model-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center}
+.model-card .name{font-size:11px;color:var(--muted);margin-bottom:6px}
+.model-card .signal{font-size:20px;font-weight:700}
+.model-card .signal.up{color:var(--green)}
+.model-card .signal.down{color:var(--red)}
+.model-card .signal.flat{color:var(--yellow)}
+.model-card .conf{font-size:11px;color:var(--muted);margin-top:4px}
+.agreement-bar{margin-top:12px;display:flex;align-items:center;gap:10px}
+.agreement-bar .track{flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden}
+.agreement-bar .fill{height:100%;border-radius:4px;transition:width 0.5s}
+.agreement-bar .val{font-size:13px;font-weight:600;width:40px;text-align:right}
+.high-disagree{margin-top:8px;padding:8px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:6px;font-size:12px;color:var(--red);text-align:center}
+
+/* Features */
+.feature-list{max-height:300px;overflow-y:auto}
+.feature-item{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(26,39,68,0.5)}
+.feature-item .rank{width:20px;font-size:11px;color:var(--muted);text-align:right}
+.feature-item .name{flex:1;font-size:12px}
+.feature-item .bar{width:100px;height:6px;background:var(--bg);border-radius:3px;overflow:hidden}
+.feature-item .bar-fill{height:100%;background:var(--blue);border-radius:3px}
+.feature-item .score{width:50px;font-size:11px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.feature-item .status{font-size:10px;padding:1px 6px;border-radius:3px}
+.feature-item .status.core{background:rgba(16,185,129,0.15);color:var(--green)}
+.feature-item .status.noise{background:rgba(239,68,68,0.15);color:var(--red)}
+.feature-item .status.failed{background:rgba(245,158,11,0.15);color:var(--yellow)}
+
+/* WF Table */
+.wf-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.wf-table th{text-align:left;color:var(--muted);font-weight:500;padding:6px 8px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase}
+.wf-table td{padding:6px 8px;border-bottom:1px solid rgba(26,39,68,0.3);font-variant-numeric:tabular-nums}
+.wf-table tr:hover{background:rgba(99,102,241,0.05)}
+.wf-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+.wf-stat{text-align:center;padding:8px;background:var(--bg);border-radius:6px}
+.wf-stat .val{font-size:16px;font-weight:700}
+.wf-stat .lbl{font-size:10px;color:var(--muted)}
+
+/* Cost */
+.cost-waterfall{display:flex;align-items:flex-end;gap:8px;height:120px;margin:12px 0;padding:0 8px}
+.cost-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.cost-col .bar{width:100%;border-radius:4px 4px 0 0;transition:height 0.5s}
+.cost-col .bar.gross{background:var(--green)}
+.cost-col .bar.cost{background:var(--red)}
+.cost-col .bar.net{background:var(--blue)}
+.cost-col .bar.net.negative{background:var(--red)}
+.cost-col .lbl{font-size:10px;color:var(--muted);text-align:center}
+.cost-col .val{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
+.cost-detail{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:12px}
+.cost-item{display:flex;justify-content:space-between;padding:6px 10px;background:var(--bg);border-radius:4px;font-size:12px}
+.cost-item .k{color:var(--muted)}
+.cost-warning{margin-top:12px;padding:10px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:6px;font-size:12px;color:var(--red)}
+
+/* OOS */
+.oos-compare{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}
+.oos-block{background:var(--bg);border-radius:8px;padding:14px}
+.oos-block h3{font-size:12px;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px}
+.oos-metric{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(26,39,68,0.3);font-size:12px}
+.oos-metric .k{color:var(--muted)}
+.oos-metric .v{font-weight:600;font-variant-numeric:tabular-nums}
+.oos-flag{margin-top:12px;padding:10px;border-radius:6px;font-size:12px;text-align:center;font-weight:600}
+.oos-flag.safe{background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);color:var(--green)}
+.oos-flag.danger{background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--red)}
+
+/* Loading */
+.loading{display:flex;align-items:center;justify-content:center;min-height:200px;color:var(--muted);font-size:13px}
+.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Responsive */
+@media(max-width:768px){.grid{grid-template-columns:1fr}.header{flex-wrap:wrap}.oos-compare{grid-template-columns:1fr}.wf-summary{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🔬 AI 预测完整性</h1>
+  <div class="controls">
+    <div id="fp-single-sector"></div>
+    <div id="symbol-chips"></div>
+    <div id="source-chips"></div>
+    <span id="direction-badge" class="dir-badge" style="display:none"></span>
+    <button onclick="loadDashboard()" id="refreshBtn">刷新</button>
+    <button class="secondary" onclick="toggleAuto()" id="autoBtn">自动: 关</button>
+  </div>
+</div>
+
+<div class="priority-bar" id="priorityBar">
+  <span class="label">优先级</span>
+  <span class="priority-chip" id="p-chip-1">1.硬规则</span>
+  <span class="priority-chip" id="p-chip-2">2.风控</span>
+  <span class="priority-chip" id="p-chip-3">3.SymbolFilter</span>
+  <span class="priority-chip" id="p-chip-4">4.样本外</span>
+  <span class="priority-chip" id="p-chip-5">5.WalkForward</span>
+  <span class="priority-chip" id="p-chip-6">6.净期望</span>
+  <span class="priority-chip" id="p-chip-7">7.v530区间</span>
+  <span class="priority-chip" id="p-chip-8">8.ATR校验</span>
+  <span class="priority-chip" id="p-chip-9">9.前端评分</span>
+  <span class="priority-chip" id="p-chip-10">10.UI建议</span>
+</div>
+
+<div class="score-banner" id="scoreBanner" style="display:none">
+  <div class="score-circle" id="scoreCircle">--</div>
+  <div class="score-detail">
+    <div class="title">综合风险评分</div>
+    <div class="warnings" id="scoreWarnings"></div>
+  </div>
+</div>
+
+<div class="grid" id="mainGrid">
+  <div class="loading"><div class="spinner"></div>加载中...</div>
+</div>
+
+<script src="/assets/ui-chips.js"></script>
+<script src="/assets/futures-picker.js"></script>
+<script>
+const API = window.location.origin;
+let autoTimer = null;
+
+function contractSymbol() {
+  var raw = ChipSelect.getValue('symbol-chips');
+  return FuturesPicker.toMainContract(raw || 'M');
+}
+
+async function loadDashboard() {
+  const symbol = contractSymbol();
+  const source = ChipSelect.getValue('source-chips');
+  const btn = document.getElementById('refreshBtn');
+  btn.textContent = '加载中...';
+  btn.disabled = true;
+
+  try {
+    const [r, er] = await Promise.all([
+      fetch(`${API}/api/prediction/dashboard?symbol=${symbol}&source=${source}`),
+      fetch(`${API}/api/edge/stats`).catch(() => null),
+    ]);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    const edgeData = er && er.ok ? await er.json() : null;
+    renderDashboard(data, edgeData);
+  } catch (e) {
+    document.getElementById('mainGrid').innerHTML = `<div class="card full"><h2>加载失败</h2><p style="color:var(--red)">${e.message}</p></div>`;
+  } finally {
+    btn.textContent = '刷新';
+    btn.disabled = false;
+  }
+}
+
+function renderDashboard(data, edgeData) {
+  // 方向徽章（顶栏）
+  const dir = data.direction || {};
+  const badge = document.getElementById('direction-badge');
+  const dl = (dir.direction_label || '').toLowerCase();
+  let tone = 'neutral';
+  if (dl.indexOf('多') >= 0 || dl.indexOf('涨') >= 0) tone = 'long';
+  else if (dl.indexOf('空') >= 0 || dl.indexOf('跌') >= 0) tone = 'short';
+  badge.style.display = 'inline-block';
+  badge.className = 'dir-badge ' + tone;
+  badge.textContent = (dir.direction_label || '未知') + ' · ' + ((dir.confidence || 0) * 100).toFixed(0) + '%';
+
+  // Priority chips
+  renderPriority(data);
+
+  // Score banner
+  const ps = data.priority_score || {};
+  const banner = document.getElementById('scoreBanner');
+  banner.style.display = 'flex';
+  const circle = document.getElementById('scoreCircle');
+  circle.textContent = ps.score ?? '--';
+  circle.className = `score-circle grade-${ps.grade || 'D'}`;
+  const warnDiv = document.getElementById('scoreWarnings');
+  warnDiv.innerHTML = (ps.warnings || []).map(w => `<span>${w}</span>`).join('');
+
+  // Render 7 modules + SymbolFilter + Accuracy
+  const grid = document.getElementById('mainGrid');
+  grid.innerHTML = `
+    ${renderEdgePanel(edgeData || {})}
+    ${renderSymbolFilter(data.symbol_filter || {}, data.direction_cross_check || {}, data.accuracy_data || {})}
+    ${renderDirection(data.direction || {})}
+    ${renderRegime(data.regime || {})}
+    ${renderEnsemble(data.ensemble || {})}
+    ${renderFeatures(data.features || {})}
+    ${renderCost(data.cost || {})}
+    ${renderWalkForward(data.walk_forward || {})}
+    ${renderOOS(data.oos || {})}
+  `;
+}
+
+function renderPriority(data) {
+  const chips = ['p-chip-1','p-chip-2','p-chip-3','p-chip-4','p-chip-5','p-chip-6','p-chip-7','p-chip-8','p-chip-9','p-chip-10'];
+  chips.forEach(id => { document.getElementById(id).className = 'priority-chip'; });
+
+  // Mark active based on data
+  const dir = data.direction || {};
+  if (dir.symbol_filter_override === false) document.getElementById('p-chip-3').classList.add('active');
+
+  const oos = data.oos || {};
+  if (oos.overfitting_flag) document.getElementById('p-chip-4').classList.add('danger');
+  else if ((oos.oos || {}).win_rate > 0.5) document.getElementById('p-chip-4').classList.add('active');
+
+  const wf = data.walk_forward || {};
+  if (wf.overfit_signal) document.getElementById('p-chip-5').classList.add('warn');
+  else if ((wf.summary || {}).avg_win_rate > 0.5) document.getElementById('p-chip-5').classList.add('active');
+
+  const cost = data.cost || {};
+  if ((cost.expectation || {}).is_negative) document.getElementById('p-chip-6').classList.add('danger');
+  else document.getElementById('p-chip-6').classList.add('active');
+
+  document.getElementById('p-chip-9').classList.add('active');
+}
+
+function renderEdgePanel(edge) {
+  const acc = ((edge.overall_accuracy || 0) * 100).toFixed(1);
+  const filled = edge.filled_total || 0;
+  const pending = edge.pending_total || 0;
+  const setups = edge.setups || [];
+  const rows = setups.length ? setups.map(s => {
+    const pct = (s.accuracy * 100).toFixed(1);
+    const cls = s.accuracy >= 0.7 ? 'active' : s.accuracy < 0.55 ? 'danger' : 'warn';
+    return `<tr>
+      <td>${s.name}</td><td>${s.n}</td><td><span class="priority-chip ${cls}">${pct}%</span></td>
+      <td>${s.current_threshold}→${s.suggested_threshold}</td><td style="color:var(--muted);font-size:11px">${s.note||''}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="5" style="color:var(--muted)">暂无已回填样本，daemon 收盘后会自动记录</td></tr>';
+  return `<div class="card full">
+    <h2>🎯 Edge 方向台账 <span class="tag">渐进精度</span></h2>
+    <div class="wf-summary" style="margin-bottom:12px">
+      <div class="regime-stat"><div class="val">${acc}%</div><div class="lbl">整体方向准确率</div></div>
+      <div class="regime-stat"><div class="val">${filled}</div><div class="lbl">已回填</div></div>
+      <div class="regime-stat"><div class="val">${pending}</div><div class="lbl">待验证</div></div>
+    </div>
+    <table class="wf-table" style="width:100%;font-size:12px;border-collapse:collapse">
+      <thead><tr style="color:var(--muted)"><th align="left">Setup</th><th>n</th><th>准确率</th><th>门槛</th><th>建议</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+function renderSymbolFilter(sf, crossCheck, accuracy) {
+  const allowed = sf.allowed || false;
+  const tier = sf.tier || '未入选';
+  const tierClass = tier === 'tier1' ? 'active' : tier === 'tier2' ? 'warn' : tier === 'tier3' ? '' : '';
+  const dirs = (sf.allowed_directions || []).join(', ') || '无';
+  const acc = ((sf.accuracy || 0) * 100).toFixed(1);
+  const n = sf.sample_count || 0;
+  const mult = sf.confidence_mult || 1;
+
+  const crossIcon = crossCheck.filter_allows ? '✅' : '❌';
+  const crossColor = crossCheck.filter_allows ? 'var(--green)' : 'var(--red)';
+  const crossDir = {1:'涨',-1:'跌',0:'平'}[crossCheck.predicted_direction] || '平';
+  const finalDir = {1:'涨',-1:'跌',0:'观望'}[crossCheck.final_direction] || '观望';
+
+  const buyAcc = ((accuracy.buy_acc || 0) * 100).toFixed(1);
+  const sellAcc = ((accuracy.sell_acc || 0) * 100).toFixed(1);
+  const buyN = accuracy.buy_n || 0;
+  const sellN = accuracy.sell_n || 0;
+  const bestDir = accuracy.best_direction || 'HOLD';
+  const bestAcc = ((accuracy.best_acc || 0) * 100).toFixed(1);
+
+  return `<div class="card full" style="border-color:${crossColor}">
+    <h2>🔒 SymbolFilter 硬规则 <span class="tag">最高优先级</span></h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px">
+      <div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">白名单状态</div>
+        <div style="font-size:16px;font-weight:700;color:${allowed?'var(--green)':'var(--red)'}">${allowed?'✅ 在白名单':'❌ 不在白名单'}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">层级: <span style="color:${tier==='tier1'?'var(--green)':tier==='tier2'?'var(--yellow)':'var(--muted)'}">${tier}</span> · 允许方向: ${dirs} · 仓位×${mult}</div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">历史准确率 (10日验证)</div>
+        <div style="font-size:14px;font-weight:600">BUY: ${buyAcc}% (${buyN}样本) · SELL: ${sellAcc}% (${sellN}样本)</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">最佳方向: <span style="color:var(--green)">${bestDir}</span> (${bestAcc}%)</div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px">方向交叉验证</div>
+        <div style="font-size:16px;font-weight:700;color:${crossColor}">${crossIcon} 预测${crossDir} → ${crossCheck.filter_allows?'通过':'拦截'} → ${finalDir}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">${crossCheck.reason||''}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderDirection(d) {
+  const p = d.probabilities || {};
+  const sources = (d.sources || []).map(s =>
+    `<span class="dir-source ${s.signal.toLowerCase()}">${s.name}: ${s.signal} (${(s.confidence*100).toFixed(0)}%)</span>`
+  ).join('');
+
+  return `<div class="card">
+    <h2>📊 方向预测 <span class="tag">Module 1</span></h2>
+    <div style="text-align:center;margin-bottom:8px">
+      <span style="font-size:22px;font-weight:700">${d.direction_label || '未知'}</span>
+      <span style="font-size:12px;color:var(--muted);margin-left:8px">置信度 ${((d.confidence||0)*100).toFixed(1)}%</span>
+    </div>
+    <div class="dir-bars">
+      <div class="dir-row"><span class="dir-label">做多</span><div class="dir-track"><div class="dir-fill long" style="width:${(p.long||0)*100}%"></div></div><span class="dir-val" style="color:var(--green)">${((p.long||0)*100).toFixed(1)}%</span></div>
+      <div class="dir-row"><span class="dir-label">做空</span><div class="dir-track"><div class="dir-fill short" style="width:${(p.short||0)*100}%"></div></div><span class="dir-val" style="color:var(--red)">${((p.short||0)*100).toFixed(1)}%</span></div>
+      <div class="dir-row"><span class="dir-label">中性</span><div class="dir-track"><div class="dir-fill neutral" style="width:${(p.neutral||0)*100}%"></div></div><span class="dir-val" style="color:var(--yellow)">${((p.neutral||0)*100).toFixed(1)}%</span></div>
+    </div>
+    <div class="dir-sources">${sources}</div>
+    <div style="font-size:10px;color:var(--muted);margin-top:8px">⚠️ 方向预测不覆盖 SymbolFilter 硬规则</div>
+  </div>`;
+}
+
+function renderRegime(d) {
+  const r = d.regime || 'unknown';
+  const rl = d.regime_label || '未知';
+  return `<div class="card">
+    <h2>🌊 市场状态 <span class="tag">Module 5</span></h2>
+    <div class="regime-badge ${r}">${rl}</div>
+    <div class="regime-stats">
+      <div class="regime-stat"><div class="val">${(d.adx||0).toFixed(1)}</div><div class="lbl">ADX</div></div>
+      <div class="regime-stat"><div class="val">${(d.volatility||0).toFixed(1)}%</div><div class="lbl">波动率</div></div>
+      <div class="regime-stat"><div class="val">${d.trend_label||'--'}</div><div class="lbl">趋势</div></div>
+    </div>
+    <div class="risk-hint">💡 ${d.risk_hint || '无提示'}</div>
+    <div style="font-size:10px;color:var(--muted);margin-top:6px">strategy_impact: ${d.strategy_impact || 'none'} (只读，不覆盖策略)</div>
+  </div>`;
+}
+
+function renderEnsemble(d) {
+  const models = (d.models || []).map(m => {
+    const cls = m.signal > 0 ? 'up' : m.signal < 0 ? 'down' : 'flat';
+    return `<div class="model-card"><div class="name">${m.name}</div><div class="signal ${cls}">${m.signal_label||'--'}</div><div class="conf">置信 ${(m.confidence*100).toFixed(0)}%</div><div class="conf">准确 ${(m.accuracy*100).toFixed(0)}%</div></div>`;
+  }).join('');
+
+  const agree = d.agreement_score || 0;
+  const agreeColor = agree >= 0.67 ? 'var(--green)' : agree >= 0.5 ? 'var(--yellow)' : 'var(--red)';
+  const disagree = d.high_disagreement ? `<div class="high-disagree">⚠️ 模型分歧较大，建议降低交易评级</div>` : '';
+
+  return `<div class="card">
+    <h2>🤝 模型集成 <span class="tag">Module 3</span></h2>
+    <div class="model-grid">${models || '<div style="color:var(--muted);font-size:12px">无模型数据</div>'}</div>
+    <div class="agreement-bar">
+      <span style="font-size:11px;color:var(--muted)">一致性</span>
+      <div class="track"><div class="fill" style="width:${agree*100}%;background:${agreeColor}"></div></div>
+      <span class="val" style="color:${agreeColor}">${(agree*100).toFixed(0)}%</span>
+    </div>
+    ${disagree}
+  </div>`;
+}
+
+function renderFeatures(d) {
+  const features = (d.features || []).slice(0, 15).map((f, i) => {
+    const maxImp = d.features[0]?.importance || 1;
+    const pct = (f.importance / maxImp * 100).toFixed(0);
+    const statusCls = f.status === 'core' ? 'core' : f.status === 'noise' ? 'noise' : f.status === 'failed' ? 'failed' : '';
+    const statusText = {core:'核心',noise:'噪音',failed:'失效',normal:'普通'}[f.status] || '';
+    return `<div class="feature-item"><span class="rank">${i+1}</span><span class="name">${f.name}</span><div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div><span class="score">${(f.importance*100).toFixed(2)}%</span>${statusText ? `<span class="status ${statusCls}">${statusText}</span>` : ''}</div>`;
+  }).join('');
+
+  return `<div class="card">
+    <h2>🎯 特征重要性 <span class="tag">Module 4</span></h2>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">共 ${d.total_features||0} 个特征，核心 ${d.core_count||0} 个，噪音 ${d.noise_count||0} 个</div>
+    <div class="feature-list">${features || '<div style="color:var(--muted);font-size:12px">无特征数据</div>'}</div>
+  </div>`;
+}
+
+function renderCost(d) {
+  const c = d.costs || {};
+  const e = d.expectation || {};
+  const maxVal = Math.max(Math.abs(e.gross||0), Math.abs(e.cost||0), Math.abs(e.net||0)) || 1;
+
+  const grossH = Math.abs(e.gross||0) / maxVal * 100;
+  const costH = Math.abs(e.cost||0) / maxVal * 100;
+  const netH = Math.abs(e.net||0) / maxVal * 100;
+
+  const warning = e.is_negative ? `<div class="cost-warning">⚠️ 净期望为负 (${(e.net||0).toFixed(4)})，即使胜率较高也可能亏损</div>` :
+    (d.risk_warning ? `<div class="cost-warning">⚠️ ${d.risk_warning}</div>` : '');
+
+  return `<div class="card">
+    <h2>💰 成本 + 期望值 <span class="tag">Module 6</span></h2>
+    <div class="cost-waterfall">
+      <div class="cost-col"><div class="val" style="color:var(--green)">${(e.gross||0).toFixed(4)}</div><div class="bar gross" style="height:${grossH}%"></div><div class="lbl">毛期望</div></div>
+      <div class="cost-col"><div class="val" style="color:var(--red)">-${(e.cost||0).toFixed(4)}</div><div class="bar cost" style="height:${costH}%"></div><div class="lbl">成本</div></div>
+      <div class="cost-col"><div class="val" style="color:${e.is_negative?'var(--red)':'var(--blue)'}">${(e.net||0).toFixed(4)}</div><div class="bar net${e.is_negative?' negative':''}" style="height:${netH}%"></div><div class="lbl">净期望</div></div>
+    </div>
+    <div class="cost-detail">
+      <div class="cost-item"><span class="k">手续费</span><span class="v">${(c.commission||0).toFixed(4)}</span></div>
+      <div class="cost-item"><span class="k">滑点</span><span class="v">${(c.slippage||0).toFixed(4)}</span></div>
+      <div class="cost-item"><span class="k">冲击成本</span><span class="v">${(c.impact||0).toFixed(4)}</span></div>
+      <div class="cost-item"><span class="k">总成本</span><span class="v">${(c.total||0).toFixed(4)} (${(c.total_pct||0).toFixed(3)}%)</span></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">盈亏比: ${d.risk_reward_ratio||0}:1</div>
+    ${warning}
+  </div>`;
+}
+
+function renderWalkForward(d) {
+  const periods = (d.periods || []).map(p => {
+    const wrColor = p.win_rate > 0.6 ? 'var(--green)' : p.win_rate > 0.4 ? 'var(--yellow)' : 'var(--red)';
+    return `<tr><td>${p.period}</td><td>${p.train_bars}</td><td>${p.test_bars}</td><td style="color:${wrColor}">${(p.win_rate*100).toFixed(1)}%</td><td>${p.net_expectation.toFixed(4)}</td><td>${p.max_drawdown.toFixed(4)}</td><td>${p.max_consecutive_losses}</td><td>${p.n_trades}</td></tr>`;
+  }).join('');
+
+  const s = d.summary || {};
+  const overfitWarn = d.overfit_signal ? `<div style="padding:8px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:6px;font-size:12px;color:var(--yellow);margin-top:8px;text-align:center">⚠️ 各期胜率差异大，可能存在过拟合</div>` : '';
+
+  return `<div class="card full">
+    <h2>📈 滚动验证 <span class="tag">Module 2</span></h2>
+    <div class="wf-summary">
+      <div class="wf-stat"><div class="val" style="color:${(s.avg_win_rate||0)>0.5?'var(--green)':'var(--red)'}">${((s.avg_win_rate||0)*100).toFixed(1)}%</div><div class="lbl">平均胜率</div></div>
+      <div class="wf-stat"><div class="val">${(s.avg_net_expectation||0).toFixed(4)}</div><div class="lbl">平均净期望</div></div>
+      <div class="wf-stat"><div class="val" style="color:var(--red)">${(s.overall_max_drawdown||0).toFixed(4)}</div><div class="lbl">最大回撤</div></div>
+      <div class="wf-stat"><div class="val">${s.worst_consecutive_losses||0}</div><div class="lbl">最大连亏</div></div>
+    </div>
+    <table class="wf-table">
+      <thead><tr><th>#</th><th>训练</th><th>测试</th><th>胜率</th><th>净期望</th><th>回撤</th><th>连亏</th><th>交易数</th></tr></thead>
+      <tbody>${periods || '<tr><td colspan="8" style="color:var(--muted);text-align:center">无数据</td></tr>'}</tbody>
+    </table>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">稳定性: ${((s.stability||0)*100).toFixed(0)}% · 窗口数: ${s.total_folds||0}</div>
+    ${overfitWarn}
+  </div>`;
+}
+
+function renderOOS(d) {
+  const tr = d.training || {};
+  const oos = d.oos || {};
+  const flagClass = d.overfitting_flag ? 'danger' : 'safe';
+  const flagText = d.overfitting_flag ? `⚠️ 过拟合! OOS/训练比 = ${(d.overfit_ratio*100).toFixed(0)}%` : `✅ OOS/训练比 = ${(d.overfit_ratio*100).toFixed(0)}%`;
+
+  return `<div class="card full">
+    <h2>🧪 样本外报告 <span class="tag">Module 7</span></h2>
+    <div class="oos-compare">
+      <div class="oos-block">
+        <h3>📊 训练集 (${d.train_size||0} 条)</h3>
+        <div class="oos-metric"><span class="k">胜率</span><span class="v">${((tr.win_rate||0)*100).toFixed(1)}%</span></div>
+        <div class="oos-metric"><span class="k">Sharpe</span><span class="v">${(tr.sharpe||0).toFixed(2)}</span></div>
+        <div class="oos-metric"><span class="k">总收益</span><span class="v">${((tr.total_return||0)*100).toFixed(2)}%</span></div>
+        <div class="oos-metric"><span class="k">最大回撤</span><span class="v">${((tr.max_drawdown||0)*100).toFixed(2)}%</span></div>
+      </div>
+      <div class="oos-block">
+        <h3>🧪 样本外 (${d.test_size||0} 条)</h3>
+        <div class="oos-metric"><span class="k">胜率</span><span class="v" style="color:${(oos.win_rate||0)>0.5?'var(--green)':'var(--red)'}">${((oos.win_rate||0)*100).toFixed(1)}%</span></div>
+        <div class="oos-metric"><span class="k">Sharpe</span><span class="v">${(oos.sharpe||0).toFixed(2)}</span></div>
+        <div class="oos-metric"><span class="k">总收益</span><span class="v">${((oos.total_return||0)*100).toFixed(2)}%</span></div>
+        <div class="oos-metric"><span class="k">最大回撤</span><span class="v">${((oos.max_drawdown||0)*100).toFixed(2)}%</span></div>
+      </div>
+    </div>
+    <div class="oos-flag ${flagClass}">${flagText}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">稳定性: ${((d.stability||0)*100).toFixed(0)}% · ${d.recommendation||''}</div>
+  </div>`;
+}
+
+let autoOn = false;
+function toggleAuto() {
+  autoOn = !autoOn;
+  document.getElementById('autoBtn').textContent = `自动: ${autoOn?'开':'关'}`;
+  if (autoOn) { autoTimer = setInterval(loadDashboard, 60000); loadDashboard(); }
+  else { clearInterval(autoTimer); autoTimer = null; }
+}
+
+ChipSelect.mount('source-chips', [
+  { value: 'akshare', label: 'akshare' },
+  { value: 'synthetic', label: 'synthetic' },
+], { value: 'akshare', compact: true, onChange: loadDashboard });
+
+FuturesPicker.mountSingle('symbol-chips', {
+  apiBase: API,
+  sectorContainerId: 'fp-single-sector',
+  defaultCode: 'M',
+  onSymbolChange: loadDashboard,
+}).then(loadDashboard);
+</script>
+</body>
+</html>

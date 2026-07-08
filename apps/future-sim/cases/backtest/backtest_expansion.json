@@ -1,0 +1,282 @@
+[
+  {
+    "name": "Jasper AI",
+    "case_id": "CASE-FAIL-001",
+    "pre_launch": {
+      "clarity": 85,
+      "pain": 70,
+      "retention": 50,
+      "distribution": 80
+    },
+    "actual_outcome": "low_alive",
+    "path_type": "venture-funded, category-king-then-disrupted",
+    "confidence": 0.85,
+    "notes": "GPT wrapper disrupted by underlying model provider. Peak $1.5B valuation. Strong affiliate marketing but no defensible moat."
+  },
+  {
+    "name": "Stability AI",
+    "case_id": "CASE-FAIL-002",
+    "pre_launch": {
+      "clarity": 60,
+      "pain": 55,
+      "retention": 45,
+      "distribution": 75
+    },
+    "actual_outcome": "low_alive",
+    "path_type": "venture-funded, open-source-to-commercial",
+    "confidence": 0.9,
+    "notes": "Open-source AI image generation pioneer. Massive community but couldn't monetize. Valuation dropped from $1B+ to distressed."
+  },
+  {
+    "name": "Inflection AI (Pi)",
+    "case_id": "CASE-FAIL-003",
+    "pre_launch": {
+      "clarity": 70,
+      "pain": 30,
+      "retention": 40,
+      "distribution": 35
+    },
+    "actual_outcome": "dead",
+    "path_type": "venture-funded, acqui-hire",
+    "confidence": 0.95,
+    "notes": "Personal AI chatbot by ex-DeepMind founders. No clear revenue model. Microsoft absorbed team and technology, product discontinued."
+  },
+  {
+    "name": "Juicero",
+    "case_id": "CASE-FAIL-004",
+    "pre_launch": {
+      "clarity": 75,
+      "pain": 25,
+      "retention": 30,
+      "distribution": 40
+    },
+    "actual_outcome": "dead",
+    "path_type": "venture-funded, hardware-disaster",
+    "confidence": 0.98,
+    "notes": "WiFi-connected juicer with proprietary packs. $399 machine destroyed by Bloomberg hand-squeeze video. $120M raised, zero value."
+  },
+  {
+    "name": "Quibi",
+    "case_id": "CASE-FAIL-005",
+    "pre_launch": {
+      "clarity": 80,
+      "pain": 35,
+      "retention": 25,
+      "distribution": 50
+    },
+    "actual_outcome": "dead",
+    "path_type": "venture-funded, celebrity-backed, pandemic-misfire",
+    "confidence": 0.95,
+    "notes": "Short-form premium mobile streaming. $1.75B raised, dead in 6 months. Worst timing: launched during COVID when people watch TV, not phones."
+  },
+  {
+    "name": "Pebble",
+    "case_id": "CASE-FAIL-006",
+    "pre_launch": {
+      "clarity": 85,
+      "pain": 60,
+      "retention": 55,
+      "distribution": 70
+    },
+    "actual_outcome": "dead",
+    "path_type": "crowdfunding, hardware, acquired-for-parts",
+    "confidence": 0.95,
+    "notes": "E-paper smartwatch pioneer. Apple Watch launched April 2015, crushed competition. Acquired by Fitbit for $23M vs $740M peak (97% destruction)."
+  },
+  {
+    "name": "Character.ai",
+    "case_id": "CASE-FAIL-007",
+    "pre_launch": {
+      "clarity": 65,
+      "pain": 50,
+      "retention": 70,
+      "distribution": 55
+    },
+    "actual_outcome": "low_alive",
+    "path_type": "venture-funded, talent-exodus",
+    "confidence": 0.85,
+    "notes": "AI character chatbot platform. Massive engagement but no monetization. Co-founders and 30 key researchers left for Google in reverse acqui-hire."
+  },
+  {
+    "name": "Meta Galactica",
+    "case_id": "CASE-FAIL-008",
+    "pre_launch": {
+      "clarity": 55,
+      "pain": 45,
+      "retention": 35,
+      "distribution": 20
+    },
+    "actual_outcome": "dead",
+    "path_type": "big-tech, pulled-after-launch",
+    "confidence": 0.98,
+    "notes": "Scientific LLM trained on research papers. Lived 3 days as public demo. Hallucinated scientific citations destroyed trust."
+  },
+  {
+    "name": "Meta BlenderBot 3",
+    "case_id": "CASE-FAIL-009",
+    "pre_launch": {
+      "clarity": 50,
+      "pain": 30,
+      "retention": 25,
+      "distribution": 20
+    },
+    "actual_outcome": "dead",
+    "path_type": "big-tech, research-demo",
+    "confidence": 0.9,
+    "notes": "175B parameter conversational AI research demo. Produced offensive responses. Shut down May 2024, never became a product."
+  },
+  {
+    "name": "Amazon CodeWhisperer",
+    "case_id": "CASE-FAIL-010",
+    "pre_launch": {
+      "clarity": 75,
+      "pain": 65,
+      "retention": 70,
+      "distribution": 70
+    },
+    "actual_outcome": "dead",
+    "path_type": "big-tech, replaced-by-successor",
+    "confidence": 0.95,
+    "notes": "AI coding assistant integrated with AWS. Couldn't compete with GitHub Copilot. Folded into Amazon Q Developer and sunset."
+  },
+  {
+    "name": "Jawbone",
+    "case_id": "CASE-FAIL-011",
+    "pre_launch": {
+      "clarity": 70,
+      "pain": 60,
+      "retention": 55,
+      "distribution": 60
+    },
+    "actual_outcome": "dead",
+    "path_type": "venture-funded, hardware, liquidation",
+    "confidence": 0.95,
+    "notes": "Wearable fitness tracker pioneer. Quality issues + Fitbit and Apple Watch dominated. Raised $930M+ and still filed for liquidation."
+  },
+  {
+    "name": "WeWork",
+    "case_id": "CASE-FAIL-012",
+    "pre_launch": {
+      "clarity": 85,
+      "pain": 75,
+      "retention": 80,
+      "distribution": 70
+    },
+    "actual_outcome": "dead",
+    "path_type": "venture-funded, mega-valuation-collapse, bankruptcy",
+    "confidence": 0.99,
+    "notes": "Co-working space disrupted commercial real estate. $47B peak valuation to Chapter 11 bankruptcy with $19B in lease obligations."
+  },
+  {
+    "name": "Zenefits",
+    "case_id": "CASE-FAIL-013",
+    "pre_launch": {
+      "clarity": 80,
+      "pain": 70,
+      "retention": 75,
+      "distribution": 65
+    },
+    "actual_outcome": "dead",
+    "path_type": "venture-funded, regulatory-scandal, acquired-discount",
+    "confidence": 0.95,
+    "notes": "HR SaaS platform for benefits and payroll. Regulatory scandal with fake insurance licenses. $4.5B to $350M acquisition (92% destruction)."
+  },
+  {
+    "name": "Google Stadia",
+    "case_id": "CASE-FAIL-014",
+    "pre_launch": {
+      "clarity": 80,
+      "pain": 55,
+      "retention": 50,
+      "distribution": 50
+    },
+    "actual_outcome": "dead",
+    "path_type": "big-tech, google-graveyard",
+    "confidence": 0.98,
+    "notes": "Cloud gaming platform with impressive streaming tech. Limited game library, Google's kill-product reputation undermined trust. Full refunds on shutdown."
+  },
+  {
+    "name": "Clubhouse",
+    "case_id": "CASE-FAIL-015",
+    "pre_launch": {
+      "clarity": 75,
+      "pain": 40,
+      "retention": 35,
+      "distribution": 45
+    },
+    "actual_outcome": "dead",
+    "path_type": "venture-funded, hype-cycle, copykilled",
+    "confidence": 0.95,
+    "notes": "Audio social networking app. $4B valuation in 2021. Twitter Spaces, Spotify Greenroom copied format. Downloads plummeted, effectively dead by 2024."
+  },
+  {
+    "name": "Humane AI Pin",
+    "case_id": "CASE-FAIL-016",
+    "pre_launch": {
+      "clarity": 60,
+      "pain": 20,
+      "retention": 15,
+      "distribution": 30
+    },
+    "actual_outcome": "dead",
+    "path_type": "venture-funded, hardware, ai-hype-cycle",
+    "confidence": 0.9,
+    "notes": "Laser-projected display wearable AI device. $699 + $24/month. Only ~10K units sold. Poster child for AI hardware hype overpromising."
+  },
+  {
+    "name": "Rabbit R1",
+    "case_id": "CASE-FAIL-017",
+    "pre_launch": {
+      "clarity": 55,
+      "pain": 25,
+      "retention": 20,
+      "distribution": 35
+    },
+    "actual_outcome": "low_alive",
+    "path_type": "venture-funded, hardware, ai-hype-cycle",
+    "confidence": 0.8,
+    "notes": "AI device with Large Action Model concept. $199 price point. CES 2024 hype to disappointing reality. Alongside Humane AI Pin as AI hardware cautionary tale."
+  },
+  {
+    "name": "Arc Browser",
+    "case_id": "CASE-FAIL-018",
+    "pre_launch": {
+      "clarity": 75,
+      "pain": 55,
+      "retention": 65,
+      "distribution": 40
+    },
+    "actual_outcome": "niche_success",
+    "path_type": "venture-funded, product-pivot, browser-war-loss",
+    "confidence": 0.8,
+    "notes": "Radically redesigned browser. Critical acclaim from tech press, passionate niche community. Sub-1% market share. Pivoted to new browser 'Dia'."
+  },
+  {
+    "name": "Vine",
+    "case_id": "CASE-FAIL-019",
+    "pre_launch": {
+      "clarity": 80,
+      "pain": 55,
+      "retention": 50,
+      "distribution": 65
+    },
+    "actual_outcome": "dead",
+    "path_type": "acquired-by-big-tech, mismanaged, copykilled",
+    "confidence": 0.95,
+    "notes": "Invented 6-second looping video format. Acquired by Twitter pre-launch. Twitter failed to monetize or invest. TikTok later dominated the format Vine invented."
+  },
+  {
+    "name": "Mozilla Boot to Gecko (Firefox OS)",
+    "case_id": "CASE-FAIL-020",
+    "pre_launch": {
+      "clarity": 50,
+      "pain": 45,
+      "retention": 35,
+      "distribution": 20
+    },
+    "actual_outcome": "dead",
+    "path_type": "open-source, big-org-failure, discontinued",
+    "confidence": 0.9,
+    "notes": "HTML5-based mobile OS for budget smartphones. Android dominated emerging markets with Google services. Last GitHub commits in 2021."
+  }
+]

@@ -1,0 +1,23 @@
+# ============================================================
+# 本地 frpc 配置 - 未来模拟引擎
+# ============================================================
+#
+# 将 sim.imagebrewing.com 透传到本地 future-sim 容器
+#
+# ============================================================
+
+serverAddr = "{{ .Envs.FRPS_SERVER }}"
+serverPort = {{ .Envs.FRPS_PORT }}
+auth.method = "token"
+auth.token = "{{ .Envs.FRP_AUTH_TOKEN }}"
+transport.protocol = "websocket"
+loginFailExit = false
+
+[[proxies]]
+name = "future-sim-http"
+type = "http"
+localIP = "127.0.0.1"
+localPort = {{ .Envs.FUTURE_SIM_PORT }}
+customDomains = ["sim.imagebrewing.com"]
+transport.useEncryption = false
+transport.useCompression = true

@@ -1,0 +1,20 @@
+
+# baseline (auto)
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.pfx
+dist/
+build/
+.DS_Store
+*.log
+*.db
+.coverage
+.pytest_cache/

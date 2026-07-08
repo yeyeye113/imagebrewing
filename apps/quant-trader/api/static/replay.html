@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>策略回放 · QuantTrader</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+<script src="/assets/ui-chips.js"></script>
+<script src="/assets/strategy-picker.js"></script>
+<style>
+:root {
+  --bg: #080c14; --panel: #10172a; --border: #1a2744;
+  --text: #e2e6f2; --muted: #8892b0;
+  --green: #10b981; --red: #ef4444; --yellow: #f59e0b; --blue: #6366f1; --purple: #a855f7;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, 'Microsoft YaHei', sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, #1a1040 0%, #1e3a5f 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 24px;
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+}
+.header h1 { font-size: 20px; font-weight: 700; }
+.header h1 span { color: var(--blue); }
+.header-right { display: flex; gap: 8px; align-items: center; }
+
+/* Controls bar */
+.controls {
+  background: var(--panel); border-bottom: 1px solid var(--border);
+  padding: 12px 24px;
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+}
+.ctrl-group { display: flex; align-items: center; gap: 6px; }
+.ctrl-group-wide { flex-wrap: wrap; align-items: flex-start; }
+.ctrl-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+.ctrl-input {
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  padding: 6px 10px; border-radius: 6px; font-size: 13px; outline: none;
+  transition: border-color .2s;
+}
+.ctrl-input:focus { border-color: var(--blue); }
+select.ctrl-input { cursor: pointer; }
+.btn {
+  padding: 7px 18px; border-radius: 6px; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 600; transition: all .2s;
+}
+.btn-primary { background: var(--blue); color: #fff; }
+.btn-primary:hover { background: #4f5ce8; }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+.btn-outline:hover { border-color: var(--blue); color: var(--text); }
+
+/* Layout */
+.main { padding: 16px 24px; display: flex; flex-direction: column; gap: 16px; }
+
+/* Panel */
+.panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px; position: relative;
+}
+.panel-title {
+  font-size: 13px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em;
+  margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+}
+.panel-title .dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot-green { background: var(--green); }
+.dot-red { background: var(--red); }
+.dot-blue { background: var(--blue); }
+.dot-yellow { background: var(--yellow); }
+
+/* Stats grid */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.stat-card {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px; text-align: center;
+}
+.stat-value { font-size: 22px; font-weight: 700; line-height: 1.2; }
+.stat-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.up { color: var(--green); }
+.down { color: var(--red); }
+.neutral { color: var(--yellow); }
+
+/* Charts */
+.chart-container { position: relative; width: 100%; }
+.chart-kline { height: 360px; }
+.chart-equity { height: 240px; }
+
+/* Signal detail panel */
+.signal-detail {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 14px; margin-top: 8px; font-size: 13px;
+  display: none; /* hidden by default, shown on signal click */
+}
+.signal-detail.active { display: block; }
+.signal-detail h4 { font-size: 14px; margin-bottom: 8px; }
+.signal-meta { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+.signal-meta-item { display: flex; flex-direction: column; }
+.signal-meta-label { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+.signal-meta-value { font-size: 14px; font-weight: 600; }
+.signal-reason {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px; margin-top: 8px;
+  font-size: 12px; line-height: 1.7; color: var(--muted); white-space: pre-wrap;
+}
+
+/* Table */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+tr { border-bottom: 1px solid var(--border); }
+tr:hover { background: rgba(99,102,241,.06); }
+th {
+  text-align: left; padding: 8px 10px; font-size: 11px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em; white-space: nowrap;
+}
+td { padding: 8px 10px; white-space: nowrap; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; }
+.badge-buy { background: rgba(16,185,129,.15); color: var(--green); }
+.badge-sell { background: rgba(239,68,68,.15); color: var(--red); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* Loading */
+.loading-overlay {
+  position: absolute; inset: 0; background: rgba(8,12,20,.85);
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; z-index: 10; font-size: 14px; color: var(--muted);
+}
+.loading-overlay.hidden { display: none; }
+.spinner {
+  width: 24px; height: 24px; border: 3px solid var(--border);
+  border-top-color: var(--blue); border-radius: 50%;
+  animation: spin .8s linear infinite; margin-right: 10px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Empty state */
+.empty-state {
+  text-align: center; padding: 60px 20px; color: var(--muted);
+}
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state p { font-size: 14px; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <h1><span>&#9654;</span> 策略回放</h1>
+  <div class="header-right">
+    <a href="/" style="color:var(--muted);text-decoration:none;font-size:13px;">&#8592; 返回主页</a>
+  </div>
+</header>
+
+<!-- Controls -->
+<div class="controls">
+  <div class="ctrl-group ctrl-group-wide">
+    <span class="ctrl-label">标的</span>
+    <div id="sym-presets" style="margin-bottom:4px"></div>
+    <input id="symbol" class="ctrl-input" value="AAPL" style="width:100px;" />
+  </div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">数据源</span>
+    <div id="source-chips"></div>
+  </div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">起始</span>
+    <input id="startDate" type="date" class="ctrl-input" value="2022-01-01" />
+  </div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">结束</span>
+    <input id="endDate" type="date" class="ctrl-input" value="2024-01-01" />
+  </div>
+  <div class="ctrl-group ctrl-group-wide">
+    <span class="ctrl-label">策略组</span>
+    <div id="strategy-group-chips"></div>
+  </div>
+  <div class="ctrl-group ctrl-group-wide">
+    <span class="ctrl-label">策略</span>
+    <div id="strategy-chips"></div>
+  </div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">资金</span>
+    <input id="cash" type="number" class="ctrl-input" value="100000" style="width:100px;" />
+  </div>
+  <button id="btnRun" class="btn btn-primary" onclick="runBacktest()">回放</button>
+  <button class="btn btn-outline" onclick="resetForm()">重置</button>
+</div>
+
+<!-- Main Content -->
+<div class="main">
+
+  <!-- Performance Stats -->
+  <div class="panel" id="statsPanel" style="display:none;">
+    <div class="panel-title"><span class="dot dot-green"></span> 绩效概览</div>
+    <div class="stats-grid" id="statsGrid"></div>
+  </div>
+
+  <!-- K-Line + Signals -->
+  <div class="panel" id="klinePanel" style="display:none;">
+    <div class="panel-title"><span class="dot dot-blue"></span> K线图 · 信号标注</div>
+    <div class="chart-container chart-kline">
+      <canvas id="klineChart"></canvas>
+    </div>
+    <div class="signal-detail" id="signalDetail">
+      <h4 id="sigTitle">信号详情</h4>
+      <div class="signal-meta" id="sigMeta"></div>
+      <div class="signal-reason" id="sigReason"></div>
+    </div>
+  </div>
+
+  <!-- Signal Detail (click annotation) -->
+  <div class="panel" id="signalInfoPanel" style="display:none;">
+    <div class="panel-title"><span class="dot dot-yellow"></span> 信号详情</div>
+    <div id="signalInfoContent"></div>
+  </div>
+
+  <!-- Equity Curve -->
+  <div class="panel" id="equityPanel" style="display:none;">
+    <div class="panel-title"><span class="dot dot-green"></span> 累计收益曲线</div>
+    <div class="chart-container chart-equity">
+      <canvas id="equityChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Trade Table -->
+  <div class="panel" id="tradesPanel" style="display:none;">
+    <div class="panel-title"><span class="dot dot-red"></span> 交易记录</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>时间</th>
+            <th>标的</th>
+            <th>方向</th>
+            <th>数量</th>
+            <th>价格</th>
+            <th>费用</th>
+          </tr>
+        </thead>
+        <tbody id="tradesBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Empty state -->
+  <div class="empty-state" id="emptyState">
+    <div class="icon">&#128202;</div>
+    <p>设置参数后点击 <strong>回放</strong> 开始策略回放</p>
+  </div>
+
+</div>
+
+<script>
+const API = window.location.origin;
+let klineChart = null;
+let equityChart = null;
+
+function resetForm() {
+  document.getElementById('symbol').value = 'AAPL';
+  ChipSelect.setValue('source-chips', 'synthetic');
+  document.getElementById('startDate').value = '2022-01-01';
+  document.getElementById('endDate').value = '2024-01-01';
+  ChipSelect.setValue('source-chips', 'synthetic');
+  StrategyPicker.setValue('sma_cross');
+  document.getElementById('cash').value = '100000';
+}
+
+async function runBacktest() {
+  const btn = document.getElementById('btnRun');
+  btn.disabled = true;
+  btn.textContent = '回放中...';
+
+  const params = {
+    symbol: document.getElementById('symbol').value.trim().toUpperCase(),
+    source: ChipSelect.getValue('source-chips'),
+    start: document.getElementById('startDate').value,
+    end: document.getElementById('endDate').value,
+    strategy: StrategyPicker.getValue(),
+    cash: parseFloat(document.getElementById('cash').value) || 100000,
+    apply_horizon_preset: false,
+  };
+
+  try {
+    const resp = await fetch(`${API}/backtest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    renderAll(data);
+  } catch (e) {
+    alert('回放失败: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '回放';
+  }
+}
+
+function renderAll(data) {
+  document.getElementById('emptyState').style.display = 'none';
+
+  // 1. Stats
+  renderStats(data);
+
+  // 2. K-line + signals
+  renderKline(data);
+
+  // 3. Equity curve
+  renderEquity(data);
+
+  // 4. Trades table
+  renderTrades(data);
+
+  // Show all panels
+  ['statsPanel','klinePanel','equityPanel','tradesPanel'].forEach(id => {
+    document.getElementById(id).style.display = '';
+  });
+}
+
+/* ========== 1. Stats ========== */
+function renderStats(data) {
+  const s = data.stats || {};
+  const cards = [
+    { label: '总收益', value: pct(s.total_return), cls: s.total_return >= 0 ? 'up' : 'down' },
+    { label: '夏普比率', value: num(s.sharpe), cls: s.sharpe >= 1 ? 'up' : s.sharpe >= 0 ? 'neutral' : 'down' },
+    { label: '最大回撤', value: pct(s.max_drawdown), cls: 'down' },
+    { label: '胜率', value: pct(s.win_rate), cls: s.win_rate >= 0.5 ? 'up' : 'down' },
+    { label: '交易次数', value: data.n_trades, cls: '' },
+    { label: '买持收益', value: pct(data.buy_and_hold), cls: data.buy_and_hold >= 0 ? 'up' : 'down' },
+    { label: 'CAGR', value: pct(s.cagr), cls: s.cagr >= 0 ? 'up' : 'down' },
+    { label: '风险事件', value: data.risk_events || 0, cls: data.risk_events > 0 ? 'down' : '' },
+  ];
+  const html = cards.map(c => `
+    <div class="stat-card">
+      <div class="stat-value ${c.cls}">${c.value}</div>
+      <div class="stat-label">${c.label}</div>
+    </div>
+  `).join('');
+  document.getElementById('statsGrid').innerHTML = html;
+}
+
+/* ========== 2. K-Line + Signals ========== */
+function renderKline(data) {
+  if (klineChart) { klineChart.destroy(); klineChart = null; }
+
+  const fills = data.fills || [];
+  const signals = data.signals || [];
+
+  // Build fill lookup by time
+  const fillMap = {};
+  fills.forEach(f => {
+    const t = f.time.split(' ')[0]; // date only
+    if (!fillMap[t]) fillMap[t] = [];
+    fillMap[t].push(f);
+  });
+
+  // Build signal lookup by time
+  const signalMap = {};
+  signals.forEach(s => {
+    const t = s.time.split(' ')[0];
+    signalMap[t] = s.signal;
+  });
+
+  // We need bar data - fetch it from the market/bars endpoint
+  // But we already have equity curve, let's just use fills for buy/sell markers
+  // For the actual candlestick, we need bar data
+  fetchBars(data.symbol, data.source, document.getElementById('startDate').value, document.getElementById('endDate').value)
+    .then(bars => renderKlineCanvas(bars, fills, signals, data));
+}
+
+async function fetchBars(symbol, source, start, end) {
+  try {
+    const resp = await fetch(`${API}/market/bars?symbol=${symbol}&source=${source}&start=${start}&end=${end}&interval=1d`);
+    if (!resp.ok) return [];
+    const d = await resp.json();
+    return d.bars || [];
+  } catch { return []; }
+}
+
+function renderKlineCanvas(bars, fills, signals, data) {
+  if (!bars.length) {
+    document.getElementById('klinePanel').innerHTML = '<div class="panel-title"><span class="dot dot-blue"></span> K线图 · 信号标注</div><p style="color:var(--muted);font-size:13px;">无K线数据</p>';
+    return;
+  }
+
+  // Build fill markers indexed by date
+  const fillMap = {};
+  fills.forEach(f => {
+    const d = f.time.split(' ')[0];
+    fillMap[d] = f;
+  });
+
+  const signalMap = {};
+  signals.forEach(s => {
+    const d = s.time.split(' ')[0];
+    signalMap[d] = s.signal;
+  });
+
+  const labels = bars.map(b => b.time.split(' ')[0]);
+  const closes = bars.map(b => b.close);
+
+  // Annotation markers for buy/sell
+  const annotations = {};
+  fills.forEach((f, i) => {
+    const d = f.time.split(' ')[0];
+    const idx = labels.indexOf(d);
+    if (idx < 0) return;
+    const isBuy = f.side === 'buy';
+    annotations[`trade_${i}`] = {
+      type: 'label',
+      xValue: d,
+      yValue: f.price,
+      content: isBuy ? '↑' : '↓',
+      color: isBuy ? '#10b981' : '#ef4444',
+      font: { size: 18, weight: 'bold' },
+      position: { x: 'center', y: isBuy ? 'end' : 'start' },
+      backgroundColor: 'transparent',
+      borderColor: 'transparent',
+      padding: 0,
+    };
+  });
+
+  // Also add signal markers (signal=1 buy, signal=-1 sell)
+  // We only mark those that didn't result in a fill (to avoid double markers)
+  const signalAnnotations = {};
+  signals.forEach((s, i) => {
+    const d = s.time.split(' ')[0];
+    if (fillMap[d]) return; // already marked by fill
+    if (s.signal === 0) return;
+    const isBuy = s.signal === 1;
+    signalAnnotations[`sig_${i}`] = {
+      type: 'label',
+      xValue: d,
+      yValue: closes[labels.indexOf(d)] || 0,
+      content: isBuy ? '▲' : '▼',
+      color: isBuy ? 'rgba(16,185,129,0.5)' : 'rgba(239,68,68,0.5)',
+      font: { size: 12 },
+      position: { x: 'center', y: isBuy ? 'end' : 'start' },
+      backgroundColor: 'transparent',
+      borderColor: 'transparent',
+      padding: 0,
+    };
+  });
+
+  const ctx = document.getElementById('klineChart').getContext('2d');
+  klineChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: data.symbol + ' Close',
+        data: closes,
+        borderColor: '#6366f1',
+        backgroundColor: 'rgba(99,102,241,0.08)',
+        fill: true,
+        tension: 0.1,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        borderWidth: 1.5,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1a2744',
+          titleColor: '#e2e6f2',
+          bodyColor: '#e2e6f2',
+          borderColor: '#2a3a5c',
+          borderWidth: 1,
+          callbacks: {
+            afterBody: function(context) {
+              const idx = context[0].dataIndex;
+              const d = labels[idx];
+              const f = fillMap[d];
+              const s = signalMap[d];
+              let lines = [];
+              if (f) lines.push(`${f.side === 'buy' ? '买入' : '卖出'} ${f.qty}股 @ ${f.price.toFixed(2)}`);
+              if (s !== undefined) lines.push(`信号: ${s === 1 ? 'BUY' : s === -1 ? 'SELL' : 'HOLD'}`);
+              return lines;
+            }
+          }
+        },
+        annotation: { annotations: { ...annotations, ...signalAnnotations } },
+      },
+      scales: {
+        x: {
+          ticks: { color: '#8892b0', maxTicksLimit: 20, font: { size: 10 } },
+          grid: { color: 'rgba(26,39,68,0.5)' },
+        },
+        y: {
+          ticks: { color: '#8892b0', font: { size: 10 } },
+          grid: { color: 'rgba(26,39,68,0.5)' },
+        },
+      },
+    },
+  });
+
+  // Click to show signal detail
+  klineChart.options.onClick = (evt, elements) => {
+    if (!elements.length) { document.getElementById('signalDetail').classList.remove('active'); return; }
+    const idx = elements[0].index;
+    const d = labels[idx];
+    const f = fillMap[d];
+    const s = signalMap[d];
+    showSignalDetail(d, f, s, data);
+  };
+}
+
+function showSignalDetail(date, fill, signal, data) {
+  const panel = document.getElementById('signalDetail');
+  const title = document.getElementById('sigTitle');
+  const meta = document.getElementById('sigMeta');
+  const reason = document.getElementById('sigReason');
+
+  let side = 'HOLD';
+  if (fill) side = fill.side === 'buy' ? 'BUY' : 'SELL';
+  else if (signal !== undefined) side = signal === 1 ? 'BUY' : signal === -1 ? 'SELL' : 'HOLD';
+
+  title.textContent = `${date} — ${side}`;
+
+  let metaHtml = '';
+  if (fill) {
+    metaHtml += `<div class="signal-meta-item"><span class="signal-meta-label">价格</span><span class="signal-meta-value">${fill.price.toFixed(2)}</span></div>`;
+    metaHtml += `<div class="signal-meta-item"><span class="signal-meta-label">数量</span><span class="signal-meta-value">${fill.qty}</span></div>`;
+    metaHtml += `<div class="signal-meta-item"><span class="signal-meta-label">费用</span><span class="signal-meta-value">${fill.cost.toFixed(2)}</span></div>`;
+  }
+  metaHtml += `<div class="signal-meta-item"><span class="signal-meta-label">信号</span><span class="signal-meta-value">${side}</span></div>`;
+  if (data.horizon) {
+    metaHtml += `<div class="signal-meta-item"><span class="signal-meta-label">周期</span><span class="signal-meta-value">${data.horizon}</span></div>`;
+  }
+  meta.innerHTML = metaHtml;
+
+  // Build reasoning text
+  let reasonText = '';
+  if (data.tips && data.tips.length) {
+    reasonText += '\n策略建议:\n';
+    data.tips.forEach(t => {
+      reasonText += `[${t.level}] ${t.message}\n`;
+    });
+  }
+  if (data.risk_analysis) {
+    const ra = data.risk_analysis;
+    if (ra.risk_level) reasonText += `\n风险等级: ${ra.risk_level}`;
+    if (ra.position_risk) reasonText += `\n持仓风险: ${ra.position_risk}`;
+  }
+  if (!reasonText) reasonText = '暂无详细信号理由。';
+  reason.textContent = reasonText;
+  panel.classList.add('active');
+}
+
+/* ========== 3. Equity Curve ========== */
+function renderEquity(data) {
+  if (equityChart) { equityChart.destroy(); equityChart = null; }
+
+  const curve = data.equity_curve || [];
+  if (!curve.length) return;
+
+  const labels = curve.map(c => c.time.split(' ')[0]);
+  const equities = curve.map(c => c.equity);
+  const initial = equities[0] || 1;
+  const returns = equities.map(e => (e / initial - 1) * 100);
+
+  // Buy & hold line
+  const bh = data.buy_and_hold || 0;
+  const bhLine = labels.map((_, i) => {
+    const t = i / (labels.length - 1);
+    return bh * 100 * t;
+  });
+
+  const ctx = document.getElementById('equityChart').getContext('2d');
+  equityChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: '策略收益 %',
+          data: returns,
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16,185,129,0.08)',
+          fill: true,
+          tension: 0.2,
+          pointRadius: 0,
+          borderWidth: 2,
+        },
+        {
+          label: 'Buy & Hold %',
+          data: bhLine,
+          borderColor: 'rgba(136,146,176,0.5)',
+          borderDash: [4, 4],
+          pointRadius: 0,
+          borderWidth: 1,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { labels: { color: '#8892b0', font: { size: 11 } } },
+        tooltip: {
+          backgroundColor: '#1a2744',
+          titleColor: '#e2e6f2',
+          bodyColor: '#e2e6f2',
+          borderColor: '#2a3a5c',
+          borderWidth: 1,
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}%`
+          }
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: '#8892b0', maxTicksLimit: 15, font: { size: 10 } },
+          grid: { color: 'rgba(26,39,68,0.5)' },
+        },
+        y: {
+          ticks: { color: '#8892b0', font: { size: 10 }, callback: v => v.toFixed(0) + '%' },
+          grid: { color: 'rgba(26,39,68,0.5)' },
+        },
+      },
+    },
+  });
+}
+
+/* ========== 4. Trades Table ========== */
+function renderTrades(data) {
+  const fills = data.fills || [];
+  const body = document.getElementById('tradesBody');
+
+  if (!fills.length) {
+    body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">无交易记录</td></tr>';
+    return;
+  }
+
+  // Pair trades for P&L
+  let openBuy = null;
+  const rows = fills.map((f, i) => {
+    const isBuy = f.side === 'buy';
+    let pnl = '';
+    let pnlCls = '';
+    if (!isBuy && openBuy) {
+      const pnlVal = (f.price - openBuy.price) * f.qty - (openBuy.cost || 0) - (f.cost || 0);
+      const pnlPct = ((f.price / openBuy.price - 1) * 100).toFixed(2);
+      pnl = `${pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(0)} (${pnlPct}%)`;
+      pnlCls = pnlVal >= 0 ? 'up' : 'down';
+      openBuy = null;
+    } else if (isBuy) {
+      openBuy = f;
+    }
+    return `<tr>
+      <td>${f.time}</td>
+      <td>${f.symbol}</td>
+      <td><span class="badge ${isBuy ? 'badge-buy' : 'badge-sell'}">${isBuy ? '买入' : '卖出'}</span></td>
+      <td>${f.qty}</td>
+      <td>${f.price.toFixed(2)}</td>
+      <td class="${pnlCls}">${pnl || (f.cost ? f.cost.toFixed(2) : '-')}</td>
+    </tr>`;
+  }).join('');
+
+  body.innerHTML = rows;
+}
+
+/* ========== Helpers ========== */
+function pct(v) {
+  if (v === undefined || v === null) return '-';
+  return (v * 100).toFixed(2) + '%';
+}
+function num(v) {
+  if (v === undefined || v === null) return '-';
+  return parseFloat(v).toFixed(2);
+}
+
+// Auto-run on Enter in symbol input
+document.getElementById('symbol').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runBacktest();
+});
+
+ChipSelect.mount('source-chips', [
+  { value: 'synthetic', label: 'Synthetic' },
+  { value: 'akshare', label: 'AkShare' },
+  { value: 'yfinance', label: 'YFinance' },
+], { value: 'synthetic', compact: true });
+
+StrategyPicker.mount('strategy-chips', 'strategy-group-chips', {
+  defaultGroup: 'classic',
+  defaultStrategy: 'sma_cross',
+});
+
+var SYM_PRESETS = [
+  { value: 'AAPL', label: 'AAPL' },
+  { value: 'TSLA', label: 'TSLA' },
+  { value: 'DEMO', label: 'DEMO' },
+  { value: '600519', label: '茅台' },
+  { value: 'RB0', label: '螺纹 RB0' },
+  { value: 'M0', label: '豆粕 M0' },
+];
+
+function applySymPreset(code) {
+  document.getElementById('symbol').value = code;
+  if (/0$/.test(code) && ChipSelect.getValue('source-chips') === 'synthetic') {
+    ChipSelect.setValue('source-chips', 'akshare');
+  }
+}
+
+ChipSelect.mount('sym-presets', SYM_PRESETS, {
+  value: 'AAPL',
+  compact: true,
+  wrap: true,
+  onChange: applySymPreset,
+});
+
+document.getElementById('symbol').addEventListener('change', function () {
+  var v = this.value.toUpperCase();
+  this.value = v;
+  if (SYM_PRESETS.some(function (p) { return p.value === v; })) {
+    ChipSelect.setValue('sym-presets', v, true);
+  }
+});
+</script>
+</body>
+</html>

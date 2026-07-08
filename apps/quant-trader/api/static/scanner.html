@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="refresh" content="120" />
+<title>实时选股 · A 股短线扫描</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg: #080c14; --panel: #10172a; --border: #1a2744;
+    --text: #e2e6f2; --muted: #8892b0;
+    --green: #10b981; --red: #ef4444; --yellow: #f59e0b; --blue: #6366f1;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,'Microsoft YaHei',sans-serif; background:var(--bg); color:var(--text); }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; }
+  .up { color:var(--green); }
+  .down { color:var(--red); }
+  .muted { color:var(--muted); }
+  .pulse { animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+  .score-bar {
+    height:6px; border-radius:3px; background:linear-gradient(90deg, var(--red), var(--yellow), var(--green));
+    position:relative; display:inline-block; width:80px;
+  }
+  .score-bar .fill {
+    height:100%; border-radius:3px; position:absolute; right:0; top:0;
+    background:var(--bg); transition:width .3s;
+  }
+
+  tr { border-bottom:1px solid var(--border); }
+  tr:hover { background:rgba(99,102,241,.06); }
+  th { text-align:left; padding:8px 10px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; white-space:nowrap; }
+  td { padding:8px 10px; font-size:13px; white-space:nowrap; vertical-align:top; }
+
+  .badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:10px; font-weight:600; }
+  .badge-l { background:rgba(16,185,129,.15); color:var(--green); }
+  .badge-s { background:rgba(99,102,241,.15); color:var(--blue); }
+  .badge-m { background:rgba(245,158,11,.15); color:var(--yellow); }
+
+  .action-buy  { background:rgba(16,185,129,.2); color:var(--green); padding:3px 12px; border-radius:6px; font-weight:700; font-size:12px; }
+  .action-watch{ background:rgba(245,158,11,.15); color:var(--yellow); padding:3px 12px; border-radius:6px; font-weight:700; font-size:12px; }
+  .action-skip { background:rgba(239,68,68,.15); color:var(--red); padding:3px 12px; border-radius:6px; font-weight:700; font-size:12px; }
+
+  .advice-cell { max-width:320px; white-space:normal; font-size:12px; line-height:1.5; }
+</style>
+</head>
+<body class="p-3 md:p-5 max-w-7xl mx-auto">
+
+<!-- Header -->
+<header class="flex items-center justify-between flex-wrap gap-3 mb-4">
+  <div>
+    <h1 class="text-xl font-bold">📡 实时选股 · A 股短线扫描</h1>
+    <span class="muted text-sm" id="subtitle">加载中...</span>
+  </div>
+  <div class="flex items-center gap-3">
+    <span class="muted text-xs" id="countdown"></span>
+    <button onclick="runScan()" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-500 transition" id="btn-scan">
+      🔄 立即扫描
+    </button>
+    <a href="/" class="px-4 py-2 rounded-lg border border-gray-600 text-gray-300 text-sm hover:border-blue-400 transition">
+      📊 交易台
+    </a>
+  </div>
+</header>
+
+<!-- Stats bar -->
+<div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4" id="stats-bar"></div>
+
+<!-- Main table -->
+<div class="panel overflow-x-auto">
+  <div id="loading" class="text-center py-20">
+    <div class="text-4xl mb-3 pulse">📡</div>
+    <div class="text-lg font-bold">正在扫描 A 股市场...</div>
+    <div class="muted text-sm mt-1">从热门成交中筛选短线候选（成交额 · 换手 · 动量）</div>
+  </div>
+
+  <div id="results" class="hidden">
+    <table class="w-full">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>代码</th>
+          <th>名称</th>
+          <th>价格</th>
+          <th>涨跌</th>
+          <th>成交额(亿)</th>
+          <th>评分</th>
+          <th>操作</th>
+          <th>建议 & 辅助分析</th>
+        </tr>
+      </thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+
+  <div id="empty" class="hidden text-center py-16">
+    <div class="text-3xl mb-2">🤔</div>
+    <div class="muted">还没有扫描结果</div>
+    <button onclick="runScan()" class="mt-3 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm">立即扫描</button>
+  </div>
+</div>
+
+<footer class="mt-4 text-center muted text-xs">
+  <span id="footer-info"></span>
+  <span class="mx-2">·</span>
+  自动刷新: 120s · 扫描热门成交 TOP100 · 技术面综合评分
+</footer>
+
+<script>
+const API = window.location.origin;
+let autoRefresh = 120;
+let countdown = autoRefresh;
+let reportData = null;
+
+// ── Action style mapping ──
+const ACTION_CLASS = { 'buy':'action-buy','watch':'action-watch','skip':'action-skip' };
+const ACTION_LABEL = { 'buy':'🟢 推荐','watch':'🟡 观望','skip':'🔴 回避' };
+
+(async function init() {
+  try {
+    const r = await fetch(`${API}/api/scanner/run`, { method: 'POST' });
+    reportData = await r.json();
+    if (reportData.status === 'ok' && reportData.candidates?.length) {
+      render(reportData);
+    } else {
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('empty').classList.remove('hidden');
+      document.getElementById('subtitle').textContent = '点击「立即扫描」开始选股';
+    }
+  } catch (e) {
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('empty').classList.remove('hidden');
+    document.getElementById('subtitle').textContent = 'API 未连接 · ' + e.message;
+  }
+
+  setInterval(() => {
+    countdown--;
+    if (countdown <= 0) { countdown = autoRefresh; runScan(); }
+    document.getElementById('countdown').textContent = `${countdown}s 后自动刷新`;
+  }, 1000);
+})();
+
+async function runScan() {
+  const btn = document.getElementById('btn-scan');
+  btn.textContent = '⏳ 扫描中...'; btn.disabled = true;
+  document.getElementById('subtitle').textContent = '正在扫描热门成交...';
+  document.getElementById('empty').classList.add('hidden');
+  document.getElementById('results').classList.add('hidden');
+  document.getElementById('loading').classList.remove('hidden');
+
+  const t0 = performance.now();
+  try {
+    const r = await fetch(`${API}/api/scanner/run?top_n=12`, { method: 'POST' });
+    reportData = await r.json();
+    const elapsed = ((performance.now() - t0) / 1000).toFixed(0);
+    if (reportData.status === 'ok') {
+      const s = reportData.stats || {};
+      document.getElementById('subtitle').textContent =
+        `扫描完成 · 耗时 ${elapsed}s · ${s.candidates || 0} 候选 · 推荐${s.buy_count||0} / 观望${s.watch_count||0} / 回避${s.skip_count||0}`;
+      render(reportData);
+      countdown = autoRefresh;
+    } else {
+      document.getElementById('subtitle').textContent = `扫描失败: ${reportData.message || '未知错误'}`;
+    }
+  } catch (e) {
+    document.getElementById('subtitle').textContent = `扫描错误: ${e.message}`;
+  } finally {
+    btn.textContent = '🔄 立即扫描'; btn.disabled = false;
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('results').classList.remove('hidden');
+  }
+}
+
+function render(data) {
+  const cands = data.candidates || [];
+  const stats = data.stats || {};
+
+  const buyCount = stats.buy_count || cands.filter(c=>c.action==='buy').length;
+  const watchCount = stats.watch_count || cands.filter(c=>c.action==='watch').length;
+  const skipCount = stats.skip_count || cands.filter(c=>c.action==='skip').length;
+  const avgScore = cands.length ? (cands.reduce((a,c)=>a+c.score,0) / cands.length).toFixed(0) : '—';
+
+  document.getElementById('stats-bar').innerHTML = `
+    <div class="panel text-center"><div class="text-2xl font-bold">${stats.total_scanned || 100}</div><div class="muted text-xs">热门扫描</div></div>
+    <div class="panel text-center"><div class="text-2xl font-bold text-blue-400">${cands.length}</div><div class="muted text-xs">候选标的</div></div>
+    <div class="panel text-center"><div class="text-2xl font-bold up">${buyCount}</div><div class="muted text-xs">推荐买入</div></div>
+    <div class="panel text-center"><div class="text-2xl font-bold text-yellow">${watchCount}</div><div class="muted text-xs">观望</div></div>
+    <div class="panel text-center"><div class="text-2xl font-bold down">${skipCount}</div><div class="muted text-xs">回避</div></div>
+    <div class="panel text-center"><div class="text-xs muted">⏱ ${data.timestamp?.slice(11,19) || '—'}</div><div class="muted text-xs mt-2">扫描时间</div></div>
+  `;
+
+  document.getElementById('table-body').innerHTML = cands.map((c, i) => {
+    const up = c.chg_pct >= 0;
+    const scoreClass = c.score >= 70 ? 'badge-l' : c.score >= 45 ? 'badge-m' : 'badge-s';
+
+    return `<tr>
+      <td class="muted">${i + 1}</td>
+      <td class="font-mono font-bold">${esc(c.code)}</td>
+      <td>${esc(c.name)}</td>
+      <td class="font-mono">${c.price.toFixed(2)}</td>
+      <td class="${up ? 'up' : 'down'}">${up ? '+' : ''}${c.chg_pct.toFixed(2)}%</td>
+      <td class="muted">${c.amount_yi.toFixed(1)}</td>
+      <td>
+        <span class="badge ${scoreClass}">${c.score}</span>
+        <div class="score-bar mt-1"><div class="fill" style="width:${(100 - c.score).toFixed(0)}%"></div></div>
+      </td>
+      <td><span class="${ACTION_CLASS[c.action] || 'action-skip'}">${ACTION_LABEL[c.action] || c.action}</span></td>
+      <td class="advice-cell">${esc(c.advice)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('footer-info').textContent =
+    `评分 = 成交额权重 + 换手率权重 + 动量权重 · 仅供参考不构成投资建议`;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'r' && e.ctrlKey) { e.preventDefault(); runScan(); }
+});
+</script>
+</body>
+</html>

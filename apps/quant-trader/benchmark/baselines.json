@@ -1,0 +1,215 @@
+{
+  "backtest_single_1y_sma_cross": {
+    "elapsed_s": 0.006836533331807004,
+    "throughput": 38323.5168006925,
+    "bars_or_items": 262,
+    "mem_delta_mb": 0.0013020833333333333,
+    "updated": "2026-06-25T03:12:46.363175",
+    "machine": "夜陵_Windows_AMD64",
+    "meta": {
+      "years": 1,
+      "strategy": "sma_cross",
+      "bars": 262,
+      "warmup": 1,
+      "measure_runs": 3
+    }
+  },
+  "backtest_single_3y_sma_cross": {
+    "elapsed_s": 0.012246599999343744,
+    "throughput": 64017.768200317805,
+    "bars_or_items": 784,
+    "mem_delta_mb": 0.0,
+    "updated": "2026-06-25T03:12:46.363175",
+    "machine": "夜陵_Windows_AMD64",
+    "meta": {
+      "years": 3,
+      "strategy": "sma_cross",
+      "bars": 784,
+      "warmup": 1,
+      "measure_runs": 3
+    }
+  },
+  "backtest_single_5y_sma_cross": {
+    "elapsed_s": 0.01873643333359117,
+    "throughput": 69597.0239790598,
+    "bars_or_items": 1304,
+    "mem_delta_mb": 0.08203125,
+    "updated": "2026-06-25T03:12:46.363175",
+    "machine": "夜陵_Windows_AMD64",
+    "meta": {
+      "years": 5,
+      "strategy": "sma_cross",
+      "bars": 1304,
+      "warmup": 1,
+      "measure_runs": 3
+    }
+  },
+  "backtest_multi_50x3y_sma_cross": {
+    "elapsed_s": 0.6631644333331982,
+    "throughput": 59110.52829382435,
+    "bars_or_items": 39200,
+    "mem_delta_mb": 0.0078125,
+    "updated": "2026-06-25T03:12:46.363175",
+    "machine": "夜陵_Windows_AMD64",
+    "meta": {
+      "n_symbols": 50,
+      "years": 3,
+      "strategy": "sma_cross",
+      "total_bars": 39200,
+      "warmup": 1,
+      "measure_runs": 3
+    }
+  },
+  "backtest_multi_100x3y_sma_cross": {
+    "elapsed_s": 1.958464800000608,
+    "throughput": 40031.355171650604,
+    "bars_or_items": 78400,
+    "mem_delta_mb": 0.00390625,
+    "updated": "2026-06-25T03:12:46.363175",
+    "machine": "夜陵_Windows_AMD64",
+    "meta": {
+      "n_symbols": 100,
+      "years": 3,
+      "strategy": "sma_cross",
+      "total_bars": 78400,
+      "warmup": 1,
+      "measure_runs": 3
+    }
+  },
+  "scanner_divination_50": {
+    "elapsed_s": 0.0005003000017798817,
+    "throughput": 99940.0356228634,
+    "bars_or_items": 50,
+    "mem_delta_mb": 0.0,
+    "updated": "2026-06-25T03:12:46.930605",
+    "machine": "夜陵_Windows_AMD64",
+    "meta": {
+      "count": 50,
+      "warmup": 1,
+      "measure_runs": 3
+    }
+  },
+  "scanner_scoring_50": {
+    "elapsed_s": 0.0005573333340483563,
+    "throughput": 89712.91854519116,
+    "bars_or_items": 50,
+    "mem_delta_mb": 0.0,
+    "updated": "2026-06-25T03:12:46.930605",
+    "machine": "夜陵_Windows_AMD64",
+    "meta": {
+      "count": 50,
+      "warmup": 1,
+      "measure_runs": 3
+    }
+  },
+  "scanner_divination_100": {
+    "elapsed_s": 0.0007996333321595254,
+    "throughput": 125057.3181209637,
+    "bars_or_items": 100,
+    "mem_delta_mb": 0.0,
+    "updated": "2026-06-25T03:12:46.930605",
+    "machine": "夜陵_Windows_AMD64",
+    "meta": {
+      "count": 100,
+      "warmup": 1,
+      "measure_runs": 3
+    }
+  },
+  "scanner_scoring_100": {
+    "elapsed_s": 0.0008960333325376268,
+    "throughput": 111602.99105926478,
+    "bars_or_items": 100,
+    "mem_delta_mb": 0.0,
+    "updated": "2026-06-25T03:12:46.930605",
+    "machine": "夜陵_Windows_AMD64",
+    "meta": {
+      "count": 100,
+      "warmup": 1,
+      "measure_runs": 3
+    }
+  },
+  "llm_prompt_build_60": {
+    "elapsed_s": 0.23334693333284426,
+    "throughput": 214.27322521817928,
+    "bars_or_items": 50,
+    "mem_delta_mb": 0.009114583333333334,
+    "updated": "2026-06-25T03:12:48.178131",
+    "machine": "夜陵_Windows_AMD64",
+    "meta": {
+      "lookback": 60,
+      "iterations": 50,
+      "warmup": 1,
+      "measure_runs": 3
+    }
+  },
+  "llm_parse_decision": {
+    "elapsed_s": 0.004718199999236579,
+    "throughput": 169556.1867087963,
+    "bars_or_items": 800,
+    "mem_delta_mb": 0.0,
+    "updated": "2026-06-25T03:12:48.178131",
+    "machine": "夜陵_Windows_AMD64",
+    "meta": {
+      "iterations": 200,
+      "variants": 4,
+      "warmup": 1,
+      "measure_runs": 3
+    }
+  },
+  "data_synthetic_252": {
+    "elapsed_s": 0.12766709999899226,
+    "throughput": 39477.672791500576,
+    "bars_or_items": 5040,
+    "mem_delta_mb": 0.0,
+    "updated": "2026-06-25T03:12:52.512538",
+    "machine": "夜陵_Windows_AMD64",
+    "meta": {
+      "n_bars": 252,
+      "iterations": 20,
+      "warmup": 1,
+      "measure_runs": 3
+    }
+  },
+  "data_synthetic_756": {
+    "elapsed_s": 0.2232344666675393,
+    "throughput": 67731.47635180393,
+    "bars_or_items": 15120,
+    "mem_delta_mb": 0.0,
+    "updated": "2026-06-25T03:12:52.512538",
+    "machine": "夜陵_Windows_AMD64",
+    "meta": {
+      "n_bars": 756,
+      "iterations": 20,
+      "warmup": 1,
+      "measure_runs": 3
+    }
+  },
+  "data_synthetic_1260": {
+    "elapsed_s": 0.4217523000006622,
+    "throughput": 59750.71149572968,
+    "bars_or_items": 25200,
+    "mem_delta_mb": 0.0,
+    "updated": "2026-06-25T03:12:52.512538",
+    "machine": "夜陵_Windows_AMD64",
+    "meta": {
+      "n_bars": 1260,
+      "iterations": 20,
+      "warmup": 1,
+      "measure_runs": 3
+    }
+  },
+  "data_csv_parse_2520": {
+    "elapsed_s": 0.13619779999862658,
+    "throughput": 370050.0301804305,
+    "bars_or_items": 50400,
+    "mem_delta_mb": 0.66796875,
+    "updated": "2026-06-25T03:12:52.512538",
+    "machine": "夜陵_Windows_AMD64",
+    "meta": {
+      "n_rows": 2520,
+      "iterations": 20,
+      "warmup": 1,
+      "measure_runs": 3
+    }
+  }
+}

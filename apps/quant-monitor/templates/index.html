@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>量化交易监控台</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0e14;--surface:#111923;--surface2:#1a2332;--border:#1e2d3d;
+  --accent:#00ff88;--accent-dim:#00cc6a;--red:#ff4757;--orange:#ffa502;
+  --text:#e0e6ed;--muted:#7a8a9e;--glow:0 0 20px rgba(0,255,136,.15);
+}
+html{font-size:14px}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;min-height:100vh;overflow-x:hidden}
+
+/* ── header ── */
+.header{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.5rem;border-bottom:1px solid var(--border);background:var(--surface)}
+.header h1{font-size:1.4rem;font-weight:700;letter-spacing:1px}
+.header h1 span{color:var(--accent)}
+.header-right{display:flex;align-items:center;gap:1rem}
+.status-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.clock{font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* ── grid layout ── */
+.dashboard{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;padding:1.5rem}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.2rem;position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s}
+.card:hover{transform:translateY(-2px);box-shadow:var(--glow)}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:0;transition:opacity .3s}
+.card:hover::before{opacity:1}
+
+/* stat cards */
+.stat-card{text-align:center}
+.stat-label{font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:.5rem}
+.stat-value{font-size:2.2rem;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat-value.accent{color:var(--accent)}
+.stat-value.red{color:var(--red)}
+.stat-value.orange{color:var(--orange)}
+.stat-sub{font-size:.75rem;color:var(--muted);margin-top:.4rem}
+
+/* section cards */
+.card-full{grid-column:1/-1}
+.card-half{grid-column:span 2}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+.card-title{font-size:1rem;font-weight:600;display:flex;align-items:center;gap:.5rem}
+.card-title .icon{font-size:1.1rem}
+
+/* ── signals table ── */
+.signals-table{width:100%;border-collapse:collapse;font-size:.82rem}
+.signals-table th{text-align:left;padding:.5rem .6rem;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border);font-size:.75rem;text-transform:uppercase;letter-spacing:1px}
+.signals-table td{padding:.5rem .6rem;border-bottom:1px solid rgba(30,45,61,.5);vertical-align:top}
+.signals-table tr{transition:background .15s}
+.signals-table tr:hover{background:rgba(0,255,136,.03)}
+.type-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.7rem;font-weight:600;text-transform:uppercase}
+.type-buy{background:rgba(0,255,136,.15);color:var(--accent)}
+.type-sell{background:rgba(255,71,87,.15);color:var(--red)}
+.type-warning{background:rgba(255,165,2,.12);color:var(--orange)}
+.type-error{background:rgba(255,71,87,.12);color:var(--red)}
+.type-info{background:rgba(122,138,158,.12);color:var(--muted)}
+
+/* ── risk bars ── */
+.risk-row{display:flex;align-items:center;justify-content:space-between;padding:.6rem 0;border-bottom:1px solid rgba(30,45,61,.4)}
+.risk-row:last-child{border-bottom:none}
+.risk-label{color:var(--muted);font-size:.82rem}
+.risk-bar-wrap{flex:1;margin:0 1rem;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden}
+.risk-bar{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--accent-dim));transition:width .8s cubic-bezier(.25,.46,.45,.94)}
+.risk-bar.danger{background:linear-gradient(90deg,var(--red),var(--orange))}
+.risk-val{font-weight:700;font-size:.9rem;min-width:50px;text-align:right;font-variant-numeric:tabular-nums}
+
+/* ── config grid ── */
+.config-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.8rem}
+.config-item{background:var(--surface2);border-radius:8px;padding:.8rem}
+.config-key{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:.3rem}
+.config-val{font-size:1rem;font-weight:600;color:var(--text)}
+
+/* ── message feed ── */
+.msg-feed{max-height:340px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.msg-feed::-webkit-scrollbar{width:4px}
+.msg-feed::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.msg-item{display:flex;gap:.8rem;padding:.45rem .3rem;border-bottom:1px solid rgba(30,45,61,.3);font-size:.8rem;animation:fadeSlide .3s ease}
+@keyframes fadeSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.msg-time{color:var(--muted);white-space:nowrap;min-width:130px;font-variant-numeric:tabular-nums;font-size:.75rem}
+.msg-text{flex:1;word-break:break-all}
+
+/* ── loading skeleton ── */
+.skeleton{background:linear-gradient(90deg,var(--surface2) 25%,rgba(26,35,50,.8) 50%,var(--surface2) 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:6px;height:1.5rem;width:60%;margin:.5rem auto}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ── refresh indicator ── */
+.refresh-bar{position:fixed;top:0;left:0;height:2px;background:var(--accent);z-index:999;transition:width 1s linear;opacity:0}
+.refresh-bar.active{opacity:1}
+
+/* ── responsive ── */
+@media(max-width:1100px){.dashboard{grid-template-columns:repeat(2,1fr)}.card-half{grid-column:span 2}}
+@media(max-width:600px){
+  .dashboard{grid-template-columns:1fr;padding:.8rem;gap:.8rem}
+  .card-half,.card-full{grid-column:1/-1}
+  .header{flex-direction:column;gap:.5rem;text-align:center}
+  .stat-value{font-size:1.6rem}
+  .config-grid{grid-template-columns:1fr 1fr}
+  .msg-item{flex-direction:column;gap:.2rem}
+  .msg-time{min-width:unset}
+}
+</style>
+</head>
+<body>
+
+<div class="refresh-bar" id="refreshBar"></div>
+
+<div class="header">
+  <h1>📊 <span>量化交易</span>监控台</h1>
+  <div class="header-right">
+    <div class="status-dot" id="statusDot"></div>
+    <span class="clock" id="clock">--:--:--</span>
+  </div>
+</div>
+
+<div class="dashboard" id="dashboard">
+
+  <!-- stat cards -->
+  <div class="card stat-card" id="cardTrades">
+    <div class="stat-label">总交易</div>
+    <div class="stat-value accent" id="statTrades"><div class="skeleton"></div></div>
+    <div class="stat-sub" id="statTradesSub"></div>
+  </div>
+  <div class="card stat-card" id="cardWinRate">
+    <div class="stat-label">胜率</div>
+    <div class="stat-value accent" id="statWinRate"><div class="skeleton"></div></div>
+    <div class="stat-sub" id="statWinRateSub"></div>
+  </div>
+  <div class="card stat-card" id="cardPnl">
+    <div class="stat-label">当日盈亏</div>
+    <div class="stat-value" id="statPnl"><div class="skeleton"></div></div>
+    <div class="stat-sub" id="statPnlSub"></div>
+  </div>
+  <div class="card stat-card" id="cardPeak">
+    <div class="stat-label">峰值权益</div>
+    <div class="stat-value" id="statPeak"><div class="skeleton"></div></div>
+    <div class="stat-sub" id="statPeakSub"></div>
+  </div>
+
+  <!-- signals -->
+  <div class="card card-half">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">📡</span> 最近信号</div>
+      <span class="clock" id="signalLog" style="font-size:.7rem"></span>
+    </div>
+    <div class="msg-feed" id="signalFeed">
+      <div class="skeleton" style="width:80%"></div>
+      <div class="skeleton" style="width:65%"></div>
+      <div class="skeleton" style="width:70%"></div>
+    </div>
+  </div>
+
+  <!-- risk -->
+  <div class="card card-half">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">🛡️</span> 风控参数</div>
+    </div>
+    <div id="riskPanel">
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+    </div>
+  </div>
+
+  <!-- config -->
+  <div class="card card-full">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">⚙️</span> 策略配置</div>
+    </div>
+    <div class="config-grid" id="configGrid">
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const $ = s => document.getElementById(s);
+const REFRESH_MS = 30000;
+let timer = null;
+
+function fmtMoney(v) {
+  if (v === null || v === undefined) return '--';
+  const n = Number(v);
+  if (isNaN(n)) return v;
+  return n.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function pnlClass(v) {
+  if (v > 0) return 'accent';
+  if (v < 0) return 'red';
+  return '';
+}
+
+function updateClock() {
+  const now = new Date();
+  $('clock').textContent = now.toLocaleTimeString('zh-CN', {hour12: false});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+function startRefreshBar() {
+  const bar = $('refreshBar');
+  bar.style.transition = 'none';
+  bar.style.width = '0%';
+  bar.classList.add('active');
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      bar.style.transition = `width ${REFRESH_MS}ms linear`;
+      bar.style.width = '100%';
+    });
+  });
+}
+
+// ── fetch helpers ──
+async function fetchJSON(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(r.status);
+    return await r.json();
+  } catch (e) {
+    console.warn('Fetch error:', url, e);
+    return null;
+  }
+}
+
+// ── render status ──
+async function loadStatus() {
+  const d = await fetchJSON('/api/status');
+  if (!d) {
+    $('statusDot').style.background = 'var(--red)';
+    $('statusDot').style.boxShadow = '0 0 8px var(--red)';
+    return;
+  }
+  $('statusDot').style.background = 'var(--accent)';
+  $('statusDot').style.boxShadow = '0 0 8px var(--accent)';
+
+  $('statTrades').textContent = d.total_trades;
+  $('statTradesSub').textContent = `今日 ${d.day_trades} 笔`;
+
+  const wr = d.win_rate;
+  $('statWinRate').textContent = wr + '%';
+  $('statWinRateSub').textContent = `${d.wins} 胜 / ${d.losses} 败`;
+  $('statWinRate').className = 'stat-value ' + (wr >= 50 ? 'accent' : 'red');
+
+  $('statPnl').textContent = (d.day_pnl >= 0 ? '+' : '') + fmtMoney(d.day_pnl);
+  $('statPnl').className = 'stat-value ' + pnlClass(d.day_pnl);
+  $('statPnlSub').textContent = `累计 ${fmtMoney(d.total_pnl)}`;
+
+  $('statPeak').textContent = '¥' + fmtMoney(d.peak_equity);
+  const cl = d.consecutive_losses;
+  $('statPeakSub').textContent = cl > 0 ? `连续亏损 ${cl} 次` : '运行正常';
+  $('statPeakSub').style.color = cl >= 3 ? 'var(--red)' : '';
+}
+
+// ── render signals ──
+async function loadSignals() {
+  const d = await fetchJSON('/api/signals');
+  if (!d) return;
+  $('signalLog').textContent = d.log_file || '';
+
+  const feed = $('signalFeed');
+  if (!d.signals || d.signals.length === 0) {
+    feed.innerHTML = '<div style="color:var(--muted);text-align:center;padding:2rem">暂无信号数据</div>';
+    return;
+  }
+  feed.innerHTML = d.signals.map(s => {
+    const cls = 'type-' + s.type;
+    const label = {buy:'买入',sell:'卖出',warning:'警告',error:'错误',info:'信息'}[s.type] || s.type;
+    return `<div class="msg-item">
+      <span class="msg-time">${s.time}</span>
+      <span class="type-badge ${cls}">${label}</span>
+      <span class="msg-text">${escHtml(s.message)}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── render risk ──
+async function loadRisk() {
+  const d = await fetchJSON('/api/risk');
+  if (!d) return;
+  const items = [
+    {label:'止损线', val: d.stop_loss, pct: d.stop_loss * 100 / 0.3, fmt: (d.stop_loss*100).toFixed(1)+'%', danger: d.stop_loss < 0.05},
+    {label:'移动止损', val: d.trailing_stop, pct: d.trailing_stop * 100 / 0.3, fmt: (d.trailing_stop*100).toFixed(1)+'%'},
+    {label:'最大回撤', val: d.max_drawdown, pct: d.max_drawdown * 100 / 0.5, fmt: (d.max_drawdown*100).toFixed(1)+'%', danger: d.max_drawdown < 0.15},
+    {label:'单笔风险', val: d.risk_per_trade, pct: d.risk_per_trade * 100 / 0.05, fmt: (d.risk_per_trade*100).toFixed(1)+'%'},
+    {label:'单票仓位上限', val: d.max_position_pct, pct: d.max_position_pct * 100 / 0.5, fmt: (d.max_position_pct*100).toFixed(0)+'%'},
+    {label:'总仓位上限', val: d.max_total_exposure, pct: d.max_total_exposure * 100 / 1, fmt: (d.max_total_exposure*100).toFixed(0)+'%'},
+    {label:'现金保留', val: d.cash_reserve_pct, pct: d.cash_reserve_pct * 100 / 0.5, fmt: (d.cash_reserve_pct*100).toFixed(0)+'%'},
+  ];
+  $('riskPanel').innerHTML = items.map(it => `
+    <div class="risk-row">
+      <span class="risk-label">${it.label}</span>
+      <div class="risk-bar-wrap">
+        <div class="risk-bar${it.danger?' danger':''}" style="width:${Math.min(it.pct,100)}%"></div>
+      </div>
+      <span class="risk-val">${it.fmt}</span>
+    </div>
+  `).join('');
+}
+
+// ── render config ──
+async function loadConfig() {
+  const d = await fetchJSON('/api/config');
+  if (!d) return;
+  const items = [
+    {key:'策略', val: d.strategy_name},
+    {key:'标的', val: d.symbols ? d.symbols.join(', ') : d.symbol},
+    {key:'数据源', val: d.data_source},
+    {key:'券商', val: d.broker},
+    {key:'初始资金', val: '¥' + fmtMoney(d.cash)},
+    {key:'周期', val: d.interval},
+    {key:'持仓风格', val: d.horizon},
+    {key:'佣金', val: (d.commission * 10000).toFixed(1) + '‱'},
+    {key:'AI扫描', val: d.scanner_enabled ? '已启用' : '未启用'},
+    {key:'扫描候选数', val: d.scanner_top_n},
+  ];
+  if (d.strategy_params) {
+    for (const [k, v] of Object.entries(d.strategy_params)) {
+      items.push({key: k, val: String(v)});
+    }
+  }
+  $('configGrid').innerHTML = items.map(it => `
+    <div class="config-item">
+      <div class="config-key">${it.key}</div>
+      <div class="config-val">${it.val || '--'}</div>
+    </div>
+  `).join('');
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ── main loop ──
+async function refresh() {
+  startRefreshBar();
+  await Promise.all([loadStatus(), loadSignals(), loadRisk(), loadConfig()]);
+  timer = setTimeout(refresh, REFRESH_MS);
+}
+
+refresh();
+</script>
+</body>
+</html>

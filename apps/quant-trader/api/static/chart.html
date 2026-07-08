@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>实时K线图 · 量化交易中枢</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
+<script src="/assets/ui-chips.js"></script>
+<script src="/assets/futures-picker.js"></script>
+<style>
+/* ─── Design Tokens (match index.html) ─── */
+:root {
+  --bg: #080c14; --bg2: #0d1220; --panel: #10172a; --border: #1a2744;
+  --text: #e2e6f2; --muted: #8892b0; --dim: #4a5578;
+  --green: #10b981; --green-bg: rgba(16,185,129,.12);
+  --red: #ef4444; --red-bg: rgba(239,68,68,.12);
+  --yellow: #f59e0b; --blue: #6366f1; --purple: #a855f7; --cyan: #06b6d4;
+  --radius: 10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, 'SF Pro Display', 'Microsoft YaHei', sans-serif;
+  background: var(--bg); color: var(--text); overflow: hidden; height: 100vh;
+}
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ─── Top Bar ─── */
+.topbar {
+  display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+  background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap;
+}
+.topbar h1 { font-size: 15px; font-weight: 700; white-space: nowrap; }
+.topbar .sep { width: 1px; height: 24px; background: var(--border); }
+
+/* ─── Controls ─── */
+.ctrl-group {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.ctrl-group label { font-size: 11px; color: var(--muted); }
+select, button {
+  font-family: inherit; font-size: 12px; padding: 4px 10px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg2); color: var(--text); cursor: pointer;
+  transition: all .15s;
+}
+select:hover, button:hover { border-color: var(--blue); }
+select:focus, button:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px rgba(99,102,241,.2); }
+.btn-active { background: var(--blue); color: #fff; border-color: var(--blue); }
+.btn-group { display: flex; gap: 0; }
+.btn-group button { border-radius: 0; }
+.btn-group button:first-child { border-radius: 6px 0 0 6px; }
+.btn-group button:last-child { border-radius: 0 6px 6px 0; }
+.btn-group button:only-child { border-radius: 6px; }
+
+/* ─── Indicator toggles ─── */
+.ind-toggles { display: flex; gap: 4px; flex-wrap: wrap; }
+.ind-toggle {
+  font-size: 10px; padding: 2px 8px; border-radius: 12px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--muted);
+  transition: all .15s;
+}
+.ind-toggle.active { border-color: var(--blue); color: var(--blue); background: rgba(99,102,241,.08); }
+.ind-toggle:hover { border-color: var(--blue); }
+
+/* ─── Chart Container ─── */
+.chart-wrap {
+  position: relative; flex: 1; display: flex; flex-direction: column;
+}
+#main-chart { flex: 1; min-height: 0; }
+#sub-chart { height: 0; transition: height .2s; }
+#sub-chart.visible { height: 160px; }
+
+/* ─── Signal overlay ─── */
+.signal-layer {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none; z-index: 10;
+}
+
+/* ─── Info tooltip ─── */
+.info-panel {
+  position: fixed; bottom: 12px; right: 12px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 14px; font-size: 12px; line-height: 1.6;
+  box-shadow: 0 4px 16px rgba(0,0,0,.4); min-width: 200px;
+  opacity: 0; transform: translateY(8px); transition: all .2s;
+  pointer-events: none;
+}
+.info-panel.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.info-panel .up { color: var(--green); }
+.info-panel .down { color: var(--red); }
+.info-panel .lbl { color: var(--muted); }
+
+/* ─── Loading ─── */
+.loading-overlay {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(8,12,20,.85); z-index: 100; transition: opacity .3s;
+}
+.loading-overlay.hidden { opacity: 0; pointer-events: none; }
+.spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── Layout ─── */
+.app { display: flex; flex-direction: column; height: 100vh; }
+.main { display: flex; flex: 1; min-height: 0; }
+
+/* ─── Signals sidebar ─── */
+.signals-panel {
+  width: 0; overflow: hidden; background: var(--panel); border-left: 1px solid var(--border);
+  transition: width .2s; display: flex; flex-direction: column;
+}
+.signals-panel.open { width: 260px; }
+.signals-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600;
+}
+.signals-list { flex: 1; overflow-y: auto; padding: 8px; }
+.sig-item {
+  padding: 6px 10px; border-radius: 6px; margin-bottom: 4px; font-size: 11px;
+  display: flex; align-items: center; gap: 8px;
+}
+.sig-buy { background: var(--green-bg); }
+.sig-sell { background: var(--red-bg); }
+.sig-icon { font-size: 14px; }
+
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+  .topbar { padding: 6px 10px; }
+  .topbar h1 { font-size: 13px; }
+  .signals-panel.open { width: 200px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Top Bar -->
+  <div class="topbar">
+    <h1>K线图</h1>
+    <div class="sep"></div>
+
+    <div class="ctrl-group">
+      <label>市场</label>
+      <div id="market-chips"></div>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="ctrl-group">
+      <label>品种</label>
+      <div id="symbol-chips"></div>
+      <div id="fp-sector-wrap" class="ctrl-group" style="display:none;margin-left:4px">
+        <div id="fp-chart-sector"></div>
+      </div>
+      <label style="margin-left:6px">数据源</label>
+      <div id="source-chips"></div>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="ctrl-group">
+      <label>周期</label>
+      <div id="interval-chips"></div>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="ctrl-group">
+      <label>范围</label>
+      <div id="range-chips"></div>
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="ctrl-group ind-toggles" id="ind-toggles">
+      <button class="ind-toggle active" data-ind="ma">MA</button>
+      <button class="ind-toggle" data-ind="boll">BOLL</button>
+      <button class="ind-toggle" data-ind="vol">VOL</button>
+      <button class="ind-toggle" data-ind="macd">MACD</button>
+      <button class="ind-toggle" data-ind="rsi">RSI</button>
+      <button class="ind-toggle" data-ind="signals">信号</button>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <div class="ctrl-group">
+      <button id="btn-signals" title="信号列表">📋</button>
+      <a href="/" style="font-size:12px;color:var(--muted);text-decoration:none">返回交易台</a>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Chart -->
+    <div class="chart-wrap">
+      <div id="main-chart"></div>
+      <div id="sub-chart"></div>
+      <div class="loading-overlay" id="loading"><div class="spinner"></div></div>
+    </div>
+
+    <!-- Signals Sidebar -->
+    <div class="signals-panel" id="signals-panel">
+      <div class="signals-header">
+        <span>交易信号</span>
+        <button id="btn-close-signals" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px">&times;</button>
+      </div>
+      <div class="signals-list" id="signals-list"></div>
+    </div>
+  </div>
+
+  <!-- Crosshair info -->
+  <div class="info-panel" id="info-panel"></div>
+</div>
+
+<script>
+/* ================================================================
+   Chart Page – Lightweight Charts + Indicators
+   ================================================================ */
+(function () {
+  'use strict';
+
+  // ─── State ───
+  const STOCK_SYMBOLS = [
+    { value: '600519', label: '600519 茅台' },
+    { value: '000001', label: '000001 平安银行' },
+    { value: '600036', label: '600036 招商银行' },
+    { value: '000858', label: '000858 五粮液' },
+  ];
+  const state = {
+    market: 'stock',
+    symbol: '600519',
+    source: 'synthetic',
+    interval: '1d',
+    days: 365,
+    indicators: new Set(['ma']),
+    bars: [],
+    signals: [],
+  };
+
+  // ─── DOM ───
+  const $ = s => document.querySelector(s);
+  const $$ = s => document.querySelectorAll(s);
+  const mainEl = $('#main-chart');
+  const subEl = $('#sub-chart');
+  const loadingEl = $('#loading');
+  const infoEl = $('#info-panel');
+
+  // ─── Chart Init ───
+  const chart = LightweightCharts.createChart(mainEl, {
+    layout: {
+      background: { type: 'solid', color: '#080c14' },
+      textColor: '#8892b0',
+      fontSize: 11,
+    },
+    grid: {
+      vertLines: { color: 'rgba(26,39,68,.5)' },
+      horzLines: { color: 'rgba(26,39,68,.5)' },
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+      vertLine: { color: 'rgba(99,102,241,.4)', width: 1, style: 0, labelBackgroundColor: '#6366f1' },
+      horzLine: { color: 'rgba(99,102,241,.4)', width: 1, style: 0, labelBackgroundColor: '#6366f1' },
+    },
+    rightPriceScale: {
+      borderColor: '#1a2744',
+      scaleMargins: { top: 0.08, bottom: 0.08 },
+    },
+    timeScale: {
+      borderColor: '#1a2744',
+      timeVisible: true,
+      secondsVisible: false,
+    },
+  });
+
+  // ─── Series ───
+  const candleSeries = chart.addCandlestickSeries({
+    upColor: '#10b981', downColor: '#ef4444',
+    borderUpColor: '#10b981', borderDownColor: '#ef4444',
+    wickUpColor: '#10b981', wickDownColor: '#ef4444',
+  });
+
+  const volumeSeries = chart.addHistogramSeries({
+    priceFormat: { type: 'volume' },
+    priceScaleId: 'vol',
+  });
+  chart.priceScale('vol').applyOptions({
+    scaleMargins: { top: 0.85, bottom: 0 },
+  });
+
+  // MA lines
+  const maLines = {};
+  const MA_PERIODS = [5, 10, 20, 60];
+  const MA_COLORS = ['#f59e0b', '#3b82f6', '#a855f7', '#ef4444'];
+  MA_PERIODS.forEach((p, i) => {
+    maLines[p] = chart.addLineSeries({
+      color: MA_COLORS[i], lineWidth: 1, priceLineVisible: false,
+      lastValueVisible: false, crosshairMarkerVisible: false,
+    });
+  });
+
+  // Bollinger Bands
+  const bollUpper = chart.addLineSeries({
+    color: 'rgba(6,182,212,.6)', lineWidth: 1, priceLineVisible: false,
+    lastValueVisible: false, crosshairMarkerVisible: false,
+  });
+  const bollMiddle = chart.addLineSeries({
+    color: 'rgba(6,182,212,.4)', lineWidth: 1, lineStyle: 2, priceLineVisible: false,
+    lastValueVisible: false, crosshairMarkerVisible: false,
+  });
+  const bollLower = chart.addLineSeries({
+    color: 'rgba(6,182,212,.6)', lineWidth: 1, priceLineVisible: false,
+    lastValueVisible: false, crosshairMarkerVisible: false,
+  });
+
+  // Sub-charts
+  let subChart = null;
+  let macdSeries = {};
+  let rsiSeries = null;
+
+  function ensureSubChart() {
+    if (subChart) return;
+    subEl.classList.add('visible');
+    subChart = LightweightCharts.createChart(subEl, {
+      layout: { background: { type: 'solid', color: '#080c14' }, textColor: '#8892b0', fontSize: 10 },
+      grid: { vertLines: { color: 'rgba(26,39,68,.3)' }, horzLines: { color: 'rgba(26,39,68,.3)' } },
+      rightPriceScale: { borderColor: '#1a2744', scaleMargins: { top: 0.1, bottom: 0.1 } },
+      timeScale: { borderColor: '#1a2744', visible: false },
+    });
+    chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+      if (range && subChart) subChart.timeScale().setVisibleLogicalRange(range);
+    });
+    subChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+      if (range) chart.timeScale().setVisibleLogicalRange(range);
+    });
+  }
+
+  function destroySubChart() {
+    if (subChart) {
+      subChart.remove();
+      subChart = null;
+      macdSeries = {};
+      rsiSeries = null;
+    }
+    subEl.innerHTML = '';
+    subEl.classList.remove('visible');
+  }
+
+  // ─── Indicator Calculations ───
+  function calcSMA(data, period) {
+    const result = [];
+    for (let i = period - 1; i < data.length; i++) {
+      let sum = 0;
+      for (let j = i - period + 1; j <= i; j++) sum += data[j].close;
+      result.push({ time: data[i].time, value: sum / period });
+    }
+    return result;
+  }
+
+  function calcEMA(data, period) {
+    const k = 2 / (period + 1);
+    const result = [{ time: data[0].time, value: data[0].close }];
+    for (let i = 1; i < data.length; i++) {
+      result.push({ time: data[i].time, value: data[i].close * k + result[i-1].value * (1 - k) });
+    }
+    return result;
+  }
+
+  function calcBollinger(data, period = 20, mult = 2) {
+    const upper = [], middle = [], lower = [];
+    for (let i = period - 1; i < data.length; i++) {
+      let sum = 0;
+      for (let j = i - period + 1; j <= i; j++) sum += data[j].close;
+      const mean = sum / period;
+      let variance = 0;
+      for (let j = i - period + 1; j <= i; j++) variance += (data[j].close - mean) ** 2;
+      const std = Math.sqrt(variance / period);
+      const t = data[i].time;
+      middle.push({ time: t, value: mean });
+      upper.push({ time: t, value: mean + mult * std });
+      lower.push({ time: t, value: mean - mult * std });
+    }
+    return { upper, middle, lower };
+  }
+
+  function calcMACD(data, fast = 12, slow = 26, sig = 9) {
+    const emaF = calcEMA(data, fast);
+    const emaS = calcEMA(data, slow);
+    const macdLine = [];
+    for (let i = slow - 1; i < emaF.length; i++) {
+      const fIdx = i - (emaF.length - emaS.length);
+      if (fIdx >= 0 && emaF[fIdx]) {
+        macdLine.push({ time: emaF[i].time, value: emaF[i].value - emaS[i - (emaF.length - emaS.length)]?.value || 0 });
+      }
+    }
+    // Simplified: build from closes
+    const macd2 = [];
+    const emaF2 = calcEMA(data, fast);
+    const emaS2 = calcEMA(data, slow);
+    for (let i = 0; i < data.length; i++) {
+      macd2.push({ time: data[i].time, close: data[i].close, emaF: emaF2[i]?.value || 0, emaS: emaS2[i]?.value || 0 });
+    }
+    const diff = macd2.map(d => ({ time: d.time, value: d.emaF - d.emaS }));
+    const sigLine = [];
+    const k = 2 / (sig + 1);
+    sigLine.push({ time: diff[0].time, value: diff[0].value });
+    for (let i = 1; i < diff.length; i++) {
+      sigLine.push({ time: diff[i].time, value: diff[i].value * k + sigLine[i-1].value * (1 - k) });
+    }
+    const histogram = diff.map((d, i) => ({
+      time: d.time,
+      value: d.value - (sigLine[i]?.value || 0),
+      color: (d.value - (sigLine[i]?.value || 0)) >= 0 ? 'rgba(16,185,129,.7)' : 'rgba(239,68,68,.7)',
+    }));
+    return { macd: diff, signal: sigLine, histogram };
+  }
+
+  function calcRSI(data, period = 14) {
+    const result = [];
+    let gainSum = 0, lossSum = 0;
+    for (let i = 1; i <= period && i < data.length; i++) {
+      const d = data[i].close - data[i-1].close;
+      if (d > 0) gainSum += d; else lossSum -= d;
+    }
+    let avgGain = gainSum / period;
+    let avgLoss = lossSum / period;
+    result.push({ time: data[period].time, value: avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss) });
+    for (let i = period + 1; i < data.length; i++) {
+      const d = data[i].close - data[i-1].close;
+      const gain = d > 0 ? d : 0;
+      const loss = d < 0 ? -d : 0;
+      avgGain = (avgGain * (period - 1) + gain) / period;
+      avgLoss = (avgLoss * (period - 1) + loss) / period;
+      result.push({ time: data[i].time, value: avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss) });
+    }
+    return result;
+  }
+
+  // ─── Signal Generation (SMA cross + RSI) ───
+  function generateSignals(data) {
+    if (data.length < 60) return [];
+    const sma20 = calcSMA(data, 20);
+    const sma60 = calcSMA(data, 60);
+    const rsi = calcRSI(data, 14);
+    const signals = [];
+    // Build lookup maps
+    const sma20Map = Object.fromEntries(sma20.map(d => [d.time, d.value]));
+    const sma60Map = Object.fromEntries(sma60.map(d => [d.time, d.value]));
+    const rsiMap = Object.fromEntries(rsi.map(d => [d.time, d.value]));
+
+    for (let i = 61; i < data.length; i++) {
+      const t = data[i].time;
+      const prev = data[i-1].time;
+      const c = sma20Map[t], p = sma20Map[prev];
+      const c60 = sma60Map[t], p60 = sma60Map[prev];
+      const r = rsiMap[t];
+      if (c == null || p == null || c60 == null || p60 == null) continue;
+
+      // Golden cross: SMA20 crosses above SMA60
+      if (p <= p60 && c > c60 && r != null && r < 70) {
+        signals.push({ time: t, side: 'buy', price: data[i].close, rsi: r });
+      }
+      // Death cross: SMA20 crosses below SMA60
+      if (p >= p60 && c < c60 && r != null && r > 30) {
+        signals.push({ time: t, side: 'sell', price: data[i].close, rsi: r });
+      }
+    }
+    return signals;
+  }
+
+  // ─── Data Fetch ───
+  async function fetchBars() {
+    const end = new Date();
+    let start;
+    if (state.days === 0) {
+      start = new Date('2020-01-01');
+    } else {
+      start = new Date(end.getTime() - state.days * 86400000);
+    }
+    const fmt = d => d.toISOString().slice(0, 10);
+    const sym = apiSymbol();
+    const url = `/market/bars?symbol=${sym}&source=${state.source}&start=${fmt(start)}&end=${fmt(end)}&interval=${state.interval}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    const json = await res.json();
+    return (json.bars || []).map(b => ({
+      time: b.time,
+      open: b.open, high: b.high, low: b.low, close: b.close,
+      volume: b.volume,
+    }));
+  }
+
+  // ─── Render ───
+  function render() {
+    const data = state.bars;
+    if (!data.length) return;
+
+    // Candles
+    candleSeries.setData(data);
+
+    // Volume
+    volumeSeries.setData(data.map(d => ({
+      time: d.time,
+      value: d.volume,
+      color: d.close >= d.open ? 'rgba(16,185,129,.35)' : 'rgba(239,68,68,.35)',
+    })));
+
+    // MA
+    MA_PERIODS.forEach((p, i) => {
+      if (state.indicators.has('ma')) {
+        maLines[p].setData(calcSMA(data, p));
+      } else {
+        maLines[p].setData([]);
+      }
+    });
+
+    // Bollinger
+    if (state.indicators.has('boll')) {
+      const boll = calcBollinger(data);
+      bollUpper.setData(boll.upper);
+      bollMiddle.setData(boll.middle);
+      bollLower.setData(boll.lower);
+    } else {
+      bollUpper.setData([]); bollMiddle.setData([]); bollLower.setData([]);
+    }
+
+    // Signals
+    state.signals = generateSignals(data);
+    renderSignals();
+  }
+
+  function renderSubChart() {
+    const data = state.bars;
+    if (!data.length) return;
+    const showMACD = state.indicators.has('macd');
+    const showRSI = state.indicators.has('rsi');
+    const showSub = showMACD || showRSI;
+
+    if (!showSub) { destroySubChart(); return; }
+    ensureSubChart();
+
+    // Clear existing
+    if (subChart) {
+      // Remove old series by recreating
+      subEl.innerHTML = '';
+      const oldChart = subChart;
+      subChart = null;
+      oldChart.remove();
+      // Recreate
+      subEl.classList.add('visible');
+      subChart = LightweightCharts.createChart(subEl, {
+        layout: { background: { type: 'solid', color: '#080c14' }, textColor: '#8892b0', fontSize: 10 },
+        grid: { vertLines: { color: 'rgba(26,39,68,.3)' }, horzLines: { color: 'rgba(26,39,68,.3)' } },
+        rightPriceScale: { borderColor: '#1a2744', scaleMargins: { top: 0.1, bottom: 0.1 } },
+        timeScale: { borderColor: '#1a2744', visible: false },
+      });
+      chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+        if (range && subChart) subChart.timeScale().setVisibleLogicalRange(range);
+      });
+      subChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+        if (range) chart.timeScale().setVisibleLogicalRange(range);
+      });
+    }
+
+    if (showMACD) {
+      const macd = calcMACD(data);
+      const histSeries = subChart.addHistogramSeries({
+        priceLineVisible: false, lastValueVisible: false,
+      });
+      histSeries.setData(macd.histogram);
+      const macdLineS = subChart.addLineSeries({
+        color: '#3b82f6', lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+      });
+      macdLineS.setData(macd.macd);
+      const sigLineS = subChart.addLineSeries({
+        color: '#f59e0b', lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+      });
+      sigLineS.setData(macd.signal);
+      // Zero line
+      const zeroLine = subChart.addLineSeries({
+        color: 'rgba(136,146,176,.2)', lineWidth: 1, lineStyle: 2,
+        priceLineVisible: false, lastValueVisible: false,
+      });
+      zeroLine.setData(data.map(d => ({ time: d.time, value: 0 })));
+    }
+
+    if (showRSI) {
+      const rsi = calcRSI(data);
+      const rsiS = subChart.addLineSeries({
+        color: '#a855f7', lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+      });
+      rsiS.setData(rsi);
+      // Overbought/oversold lines
+      const ob = subChart.addLineSeries({
+        color: 'rgba(239,68,68,.3)', lineWidth: 1, lineStyle: 2,
+        priceLineVisible: false, lastValueVisible: false,
+      });
+      ob.setData(data.map(d => ({ time: d.time, value: 70 })));
+      const os = subChart.addLineSeries({
+        color: 'rgba(16,185,129,.3)', lineWidth: 1, lineStyle: 2,
+        priceLineVisible: false, lastValueVisible: false,
+      });
+      os.setData(data.map(d => ({ time: d.time, value: 30 })));
+      const mid = subChart.addLineSeries({
+        color: 'rgba(136,146,176,.15)', lineWidth: 1, lineStyle: 2,
+        priceLineVisible: false, lastValueVisible: false,
+      });
+      mid.setData(data.map(d => ({ time: d.time, value: 50 })));
+    }
+
+    // Sync visible range
+    const range = chart.timeScale().getVisibleLogicalRange();
+    if (range) subChart.timeScale().setVisibleLogicalRange(range);
+  }
+
+  // ─── Signals ───
+  function renderSignals() {
+    if (!state.indicators.has('signals')) {
+      // Clear markers
+      candleSeries.setMarkers([]);
+      $('#signals-list').innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">点击"信号"按钮显示交易信号</div>';
+      return;
+    }
+
+    const markers = state.signals.map(s => ({
+      time: s.time,
+      position: s.side === 'buy' ? 'belowBar' : 'aboveBar',
+      color: s.side === 'buy' ? '#10b981' : '#ef4444',
+      shape: s.side === 'buy' ? 'arrowUp' : 'arrowDown',
+      text: s.side === 'buy' ? 'B' : 'S',
+      size: 1,
+    }));
+    // Sort by time
+    markers.sort((a, b) => {
+      if (typeof a.time === 'string') return a.time.localeCompare(b.time);
+      return a.time - b.time;
+    });
+    candleSeries.setMarkers(markers);
+
+    // Sidebar
+    const listEl = $('#signals-list');
+    if (!state.signals.length) {
+      listEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">暂无信号</div>';
+      return;
+    }
+    listEl.innerHTML = state.signals.slice().reverse().map(s => {
+      const cls = s.side === 'buy' ? 'sig-buy' : 'sig-sell';
+      const icon = s.side === 'buy' ? '🟢' : '🔴';
+      const label = s.side === 'buy' ? '买入' : '卖出';
+      return `<div class="sig-item ${cls}">
+        <span class="sig-icon">${icon}</span>
+        <div>
+          <div style="font-weight:600">${label} ${state.symbol}</div>
+          <div style="color:var(--muted)">${s.time} · ¥${s.price.toFixed(2)} · RSI ${s.rsi.toFixed(1)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ─── Loading ───
+  async function loadData() {
+    loadingEl.classList.remove('hidden');
+    try {
+      state.bars = await fetchBars();
+      render();
+      renderSubChart();
+    } catch (e) {
+      console.error('Load failed:', e);
+      candleSeries.setData([]);
+      volumeSeries.setData([]);
+    } finally {
+      loadingEl.classList.add('hidden');
+    }
+  }
+
+  // ─── Crosshair Info ───
+  chart.subscribeCrosshairMove(param => {
+    if (!param || !param.time || !param.seriesData) {
+      infoEl.classList.remove('show');
+      return;
+    }
+    const d = param.seriesData.get(candleSeries);
+    if (!d) { infoEl.classList.remove('show'); return; }
+    const chg = ((d.close - d.open) / d.open * 100);
+    const cls = chg >= 0 ? 'up' : 'down';
+    const arrow = chg >= 0 ? '▲' : '▼';
+    infoEl.innerHTML = `
+      <div><span class="lbl">${state.symbol}</span> <span class="${cls}">${arrow} ${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span></div>
+      <div><span class="lbl">开</span> ${d.open.toFixed(2)} <span class="lbl">高</span> ${d.high.toFixed(2)}</div>
+      <div><span class="lbl">低</span> ${d.low.toFixed(2)} <span class="lbl">收</span> <span class="${cls}">${d.close.toFixed(2)}</span></div>
+      <div><span class="lbl">量</span> ${(d.volume || 0).toLocaleString()}</div>
+    `;
+    infoEl.classList.add('show');
+  });
+
+  // ─── Resize ───
+  const ro = new ResizeObserver(() => {
+    chart.applyOptions({ width: mainEl.clientWidth, height: mainEl.clientHeight });
+    if (subChart) subChart.applyOptions({ width: subEl.clientWidth, height: subEl.clientHeight });
+  });
+  ro.observe(mainEl);
+
+  // ─── Chip selects ───
+  function apiSymbol() {
+    return state.market === 'futures'
+      ? FuturesPicker.toMainContract(state.symbol)
+      : state.symbol;
+  }
+
+  function mountStockSymbols() {
+    ChipSelect.mount('symbol-chips', STOCK_SYMBOLS, {
+      value: state.symbol,
+      wrap: true,
+      onChange: v => { state.symbol = v; loadData(); },
+    });
+  }
+
+  function mountSourceChips(options, value) {
+    ChipSelect.mount('source-chips', options, {
+      value: value,
+      onChange: v => { state.source = v; loadData(); },
+    });
+  }
+
+  function switchMarket(mkt) {
+    state.market = mkt;
+    var sectorWrap = document.getElementById('fp-sector-wrap');
+    if (mkt === 'stock') {
+      sectorWrap.style.display = 'none';
+      state.symbol = '600519';
+      state.source = 'synthetic';
+      mountSourceChips([
+        { value: 'synthetic', label: 'Synthetic' },
+        { value: 'akshare', label: 'AkShare' },
+      ], state.source);
+      mountStockSymbols();
+      loadData();
+      return;
+    }
+    sectorWrap.style.display = '';
+    state.symbol = 'RB';
+    state.source = 'akshare';
+    mountSourceChips([
+      { value: 'akshare', label: 'AkShare' },
+      { value: 'synthetic', label: 'Synthetic' },
+    ], state.source);
+    FuturesPicker.mountSingle('symbol-chips', {
+      sectorContainerId: 'fp-chart-sector',
+      defaultCode: 'RB',
+      onSymbolChange: v => {
+        state.symbol = v;
+        loadData();
+      },
+    });
+    loadData();
+  }
+
+  ChipSelect.mount('market-chips', [
+    { value: 'stock', label: 'A股' },
+    { value: 'futures', label: '期货' },
+  ], { value: 'stock', compact: true, onChange: switchMarket });
+
+  mountSourceChips([
+    { value: 'synthetic', label: 'Synthetic' },
+    { value: 'akshare', label: 'AkShare' },
+  ], state.source);
+  mountStockSymbols();
+
+  ChipSelect.mount('interval-chips', [
+    { value: '1d', label: '日线' },
+    { value: '1w', label: '周线' },
+    { value: '1M', label: '月线' },
+  ], { value: state.interval, onChange: v => { state.interval = v; loadData(); } });
+
+  ChipSelect.mount('range-chips', [
+    { value: '120', label: '120天' },
+    { value: '180', label: '180天' },
+    { value: '365', label: '1年' },
+    { value: '730', label: '2年' },
+    { value: '1825', label: '5年' },
+    { value: '0', label: '全部' },
+  ], { value: String(state.days), onChange: v => { state.days = parseInt(v, 10); loadData(); } });
+
+  // ─── Events ───
+  // Indicators
+  $$('.ind-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const ind = btn.dataset.ind;
+      if (state.indicators.has(ind)) { state.indicators.delete(ind); btn.classList.remove('active'); }
+      else { state.indicators.add(ind); btn.classList.add('active'); }
+      render();
+      renderSubChart();
+    });
+  });
+  // Signals panel
+  $('#btn-signals').addEventListener('click', () => {
+    $('#signals-panel').classList.toggle('open');
+    setTimeout(() => {
+      chart.applyOptions({ width: mainEl.clientWidth, height: mainEl.clientHeight });
+    }, 250);
+  });
+  $('#btn-close-signals').addEventListener('click', () => {
+    $('#signals-panel').classList.remove('open');
+    setTimeout(() => {
+      chart.applyOptions({ width: mainEl.clientWidth, height: mainEl.clientHeight });
+    }, 250);
+  });
+
+  // ─── Init ───
+  loadData();
+})();
+</script>
+</body>
+</html>

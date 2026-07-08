@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>量化预测中枢</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+/* ─── Design Tokens ─── */
+:root {
+  --bg-primary:   #0b0e17;
+  --bg-secondary: #111827;
+  --bg-card:      #1a2234;
+  --bg-card-hover:#1f2a40;
+  --bg-input:     #0f1629;
+  --border:       #1e2a3f;
+  --border-focus: #3b82f6;
+  --text:         #e2e8f0;
+  --text-muted:   #64748b;
+  --text-dim:     #475569;
+  --green:        #22c55e;
+  --green-dim:    rgba(34,197,94,0.12);
+  --green-glow:   rgba(34,197,94,0.25);
+  --red:          #ef4444;
+  --red-dim:      rgba(239,68,68,0.12);
+  --red-glow:     rgba(239,68,68,0.25);
+  --yellow:       #f59e0b;
+  --yellow-dim:   rgba(245,158,11,0.12);
+  --blue:         #3b82f6;
+  --blue-dim:     rgba(59,130,246,0.12);
+  --purple:       #a855f7;
+  --cyan:         #06b6d4;
+  --radius:       10px;
+  --radius-sm:    6px;
+  --shadow:       0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-lg:    0 4px 12px rgba(0,0,0,0.4);
+  --transition:   all 0.2s ease;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, 'SF Pro Display', 'Microsoft YaHei', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ─── Layout Shell ─── */
+.app-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  grid-template-rows: 56px 1fr;
+  grid-template-areas:
+    "header header"
+    "sidebar main";
+  min-height: 100vh;
+}
+@media (max-width: 1024px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "header"
+      "main";
+  }
+  .sidebar { display: none; }
+  .sidebar.open { display: flex; position: fixed; inset: 56px 0 0 0; z-index: 50; width: 280px; background: var(--bg-secondary); border-right: 1px solid var(--border); flex-direction: column; padding: 12px; gap: 12px; overflow-y: auto; }
+}
+
+/* ─── Header ─── */
+.header {
+  grid-area: header;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.header-left { display: flex; align-items: center; gap: 12px; }
+.header-left h1 { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
+.header-left .logo { font-size: 20px; }
+.header-right { display: flex; align-items: center; gap: 10px; }
+.header-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; gap: 5px;
+}
+.header-badge .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse 2s infinite;
+}
+.header-badge.offline .dot { background: var(--red); animation: none; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+.menu-toggle {
+  display: none;
+  background: none; border: none; color: var(--text);
+  font-size: 20px; cursor: pointer; padding: 4px;
+}
+@media (max-width: 1024px) { .menu-toggle { display: block; } }
+
+/* ─── Sidebar ─── */
+.sidebar {
+  grid-area: sidebar;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+.sidebar-section {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 14px;
+  border: 1px solid var(--border);
+}
+.sidebar-section h3 {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.quick-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  transition: var(--transition);
+  margin-bottom: 5px;
+  font-size: 12px;
+  color: var(--text);
+  text-align: left;
+}
+.quick-btn:hover { border-color: var(--blue); background: var(--blue-dim); }
+.quick-btn:last-child { margin-bottom: 0; }
+.signal-mini {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.signal-mini:last-child { border-bottom: none; }
+.signal-mini .sym { font-weight: 600; }
+
+/* ─── Main Content ─── */
+.main {
+  grid-area: main;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.main-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+@media (max-width: 900px) { .main-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 500px) { .main-grid { grid-template-columns: 1fr; } }
+
+.charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } }
+
+/* ─── Cards ─── */
+.card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 16px;
+  border: 1px solid var(--border);
+  transition: var(--transition);
+}
+.card:hover { border-color: rgba(59,130,246,0.3); }
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.card-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted);
+}
+
+/* ─── Stat Cards ─── */
+.stat-card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 16px;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: var(--transition);
+}
+.stat-card:hover { border-color: rgba(59,130,246,0.3); transform: translateY(-1px); }
+.stat-card.clickable { cursor: pointer; }
+.stat-card.clickable.active-filter {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.25);
+}
+.stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+.stat-value {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+.stat-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* ─── Input Bar ─── */
+.input-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.input-bar input {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: var(--transition);
+}
+.input-bar input:focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+.btn-primary {
+  padding: 10px 20px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background: var(--blue);
+  color: white;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+.btn-primary:hover { background: #2563eb; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-outline {
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  transition: var(--transition);
+}
+.btn-outline:hover { border-color: var(--blue); color: var(--text); }
+.status-text { font-size: 11px; color: var(--text-muted); }
+
+/* ─── Signal Badge ─── */
+.sig-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.sig-long  { background: var(--green-dim); color: var(--green); }
+.sig-short { background: var(--red-dim);   color: var(--red); }
+.sig-neutral { background: var(--yellow-dim); color: var(--yellow); }
+
+/* ─── Prediction Card ─── */
+.pred-card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  padding: 16px;
+  transition: var(--transition);
+  border-left: 3px solid var(--border);
+}
+.pred-card:hover { background: var(--bg-card-hover); }
+.pred-card.long  { border-left-color: var(--green); }
+.pred-card.short { border-left-color: var(--red); }
+.pred-card.neutral { border-left-color: var(--yellow); }
+.pred-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.pred-sym { font-size: 16px; font-weight: 700; }
+.pred-price-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+@media (max-width: 600px) { .pred-price-grid { grid-template-columns: repeat(3, 1fr); } }
+.pred-price-item {
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  text-align: center;
+}
+.pred-price-label { font-size: 10px; color: var(--text-dim); margin-bottom: 2px; }
+.pred-price-val { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.suggestion-box {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: var(--yellow-dim);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--yellow);
+  border: 1px solid rgba(245,158,11,0.2);
+}
+
+/* ─── Filter Row ─── */
+.filter-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.filter-btn {
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  transition: var(--transition);
+}
+.filter-btn.active { background: var(--blue); color: white; border-color: var(--blue); }
+.filter-btn:hover:not(.active) { border-color: var(--text-muted); color: var(--text); }
+
+/* ─── Data Table ─── */
+.table-wrap { overflow-x: auto; }
+table.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+table.data-table th {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-primary);
+  position: sticky;
+  top: 0;
+}
+table.data-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(30,42,63,0.5);
+}
+table.data-table tr:hover td { background: rgba(59,130,246,0.04); }
+.val-up { color: var(--green); }
+.val-down { color: var(--red); }
+.val-flat { color: var(--text-muted); }
+
+/* ─── Positions Panel ─── */
+.pos-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.pos-row:last-child { border-bottom: none; }
+.pos-sym { font-weight: 600; }
+.pos-pnl { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ─── Risk Bar ─── */
+.risk-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+.risk-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+/* ─── Empty State ─── */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.empty-state .icon { font-size: 32px; margin-bottom: 8px; }
+
+/* ─── Loading Spinner ─── */
+.spinner {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── Live Price Ticker ─── */
+.ticker-bar {
+  display: flex;
+  gap: 16px;
+  padding: 10px 0;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+.ticker-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+.ticker-item .t-sym { font-weight: 700; }
+.ticker-item .t-price { font-variant-numeric: tabular-nums; font-weight: 600; }
+.ticker-item.flash-up { border-color: var(--green); background: var(--green-dim); }
+.ticker-item.flash-down { border-color: var(--red); background: var(--red-dim); }
+
+/* ─── Watchdog Alert ─── */
+.alert-list { max-height: 160px; overflow-y: auto; }
+.alert-item {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 6px;
+  font-size: 11px;
+  border-left: 3px solid;
+}
+.alert-item.critical { background: var(--red-dim); border-color: var(--red); color: #fca5a5; }
+.alert-item.warning  { background: var(--yellow-dim); border-color: var(--yellow); color: #fcd34d; }
+.alert-item.info     { background: var(--blue-dim); border-color: var(--blue); color: #93c5fd; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+
+<!-- ═══ Header ═══ -->
+<header class="header">
+  <div class="header-left">
+    <button class="menu-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')">&#9776;</button>
+    <span class="logo">&#128302;</span>
+    <h1>量化预测中枢</h1>
+  </div>
+  <div class="header-right">
+    <div class="header-badge" id="api-badge"><span class="dot"></span><span id="api-text">检测中</span></div>
+    <div class="header-badge" id="clock-badge">&#128337; <span id="clock"></span></div>
+    <div class="header-badge" id="ws-badge"><span class="dot offline"></span><span>WS</span></div>
+  </div>
+</header>
+
+<!-- ═══ Sidebar ═══ -->
+<aside class="sidebar">
+  <div class="sidebar-section">
+    <h3>快速预测</h3>
+    <button class="quick-btn" onclick="pickAndRun('hot')">&#128293; 热门期货</button>
+    <button class="quick-btn" onclick="pickAndRun('metal')">&#128297; 金属板块</button>
+    <button class="quick-btn" onclick="pickAndRun('energy')">&#9981; 能源化工</button>
+    <button class="quick-btn" onclick="pickAndRun('agri')">&#127806; 农产品</button>
+    <button class="quick-btn" onclick="pickAndRun('finance')">&#128200; 金融期货</button>
+    <a href="/chart" class="quick-btn" style="display:block;text-align:center;text-decoration:none;color:var(--text)">&#128202; K线图</a>
+  </div>
+
+  <div class="sidebar-section">
+    <h3>今日信号</h3>
+    <div id="signal-list">
+      <div class="empty-state" style="padding:16px 0"><span class="icon">&#128203;</span><br>运行预测后显示</div>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <h3>持仓概览</h3>
+    <div id="pos-sidebar">
+      <div class="empty-state" style="padding:16px 0"><span class="icon">&#128176;</span><br>暂无持仓</div>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <h3>风控状态</h3>
+    <div id="risk-sidebar">
+      <div style="font-size:12px;color:var(--text-dim)">加载中...</div>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══ Main Content ═══ -->
+<main class="main">
+
+  <!-- Input Bar + Futures Picker -->
+  <div class="card">
+    <div class="fp-picker-block">
+      <div class="fp-picker-label">板块预设</div>
+      <div id="fp-preset-chips"></div>
+    </div>
+    <div class="fp-picker-block">
+      <div class="fp-picker-label">筛选板块</div>
+      <div id="fp-sector-chips"></div>
+    </div>
+    <div class="fp-picker-block">
+      <div class="fp-picker-label">选择品种（多选 · 上限 16 · 再点取消）</div>
+      <div class="fp-actions">
+        <button type="button" class="fp-action-btn" onclick="FuturesPicker.selectAllVisible()">全选当前板块</button>
+        <button type="button" class="fp-action-btn" onclick="FuturesPicker.invertVisible()">反选当前板块</button>
+        <button type="button" class="fp-action-btn" onclick="FuturesPicker.clearAll()">清空</button>
+      </div>
+      <div id="fp-contract-chips"></div>
+      <div class="fp-summary" id="fp-summary">加载合约列表...</div>
+    </div>
+    <div class="input-bar" style="margin-top:12px">
+      <button class="btn-primary" onclick="run()" id="btn-run">&#9654; 运行预测</button>
+      <button class="btn-outline" onclick="loadPortfolio()">&#128176; 刷新持仓</button>
+      <span class="status-text" id="status"></span>
+    </div>
+  </div>
+
+  <!-- Stats Row (click → direction filter) -->
+  <div class="main-grid">
+    <div class="stat-card clickable" onclick="filterByStat('all', this)" title="显示全部">
+      <span class="stat-label">总品种</span>
+      <span class="stat-value" id="stat-total">0</span>
+      <span class="stat-sub" id="stat-total-sub">&mdash;</span>
+    </div>
+    <div class="stat-card clickable" onclick="filterByStat('LONG', this)" title="仅看多">
+      <span class="stat-label">做多</span>
+      <span class="stat-value val-up" id="stat-long">0</span>
+      <span class="stat-sub" id="stat-long-sub">&mdash;</span>
+    </div>
+    <div class="stat-card clickable" onclick="filterByStat('SHORT', this)" title="仅看空">
+      <span class="stat-label">做空</span>
+      <span class="stat-value val-down" id="stat-short">0</span>
+      <span class="stat-sub" id="stat-short-sub">&mdash;</span>
+    </div>
+    <div class="stat-card clickable" onclick="filterByStat('NEUTRAL', this)" title="仅观望">
+      <span class="stat-label">观望</span>
+      <span class="stat-value" style="color:var(--yellow)" id="stat-neutral">0</span>
+      <span class="stat-sub" id="stat-neutral-sub">&mdash;</span>
+    </div>
+  </div>
+
+  <!-- Live Ticker -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">实时行情</span>
+      <span style="font-size:11px;color:var(--text-dim)" id="ws-status-text">未连接</span>
+    </div>
+    <div class="ticker-bar" id="ticker-bar">
+      <div class="empty-state" style="padding:12px 0;width:100%"><span class="icon">&#128225;</span><br>等待连接...</div>
+    </div>
+  </div>
+
+  <!-- Direction Filter -->
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+    <div class="fp-picker-label" style="margin:0">信号方向</div>
+    <div id="direction-chips"></div>
+  </div>
+
+  <!-- Results -->
+  <div id="results">
+    <div class="empty-state"><span class="icon">&#128640;</span><br>点击侧栏按钮或输入品种后运行预测</div>
+  </div>
+
+  <!-- Charts Row -->
+  <div class="charts-row">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">资金曲线</span>
+        <span style="font-size:11px;color:var(--text-dim)" id="equity-label">净值</span>
+      </div>
+      <div style="position:relative;height:220px">
+        <canvas id="chart-equity"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">信号分布</span>
+      </div>
+      <div style="position:relative;height:220px">
+        <canvas id="chart-signals"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Positions + Risk Row -->
+  <div class="charts-row">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">持仓明细</span>
+        <button class="btn-outline" onclick="loadPortfolio()" style="padding:4px 10px;font-size:11px">&#8635; 刷新</button>
+      </div>
+      <div id="positions-panel">
+        <div class="empty-state" style="padding:20px 0"><span class="icon">&#128176;</span><br>暂无持仓</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">风控面板</span>
+      </div>
+      <div id="risk-panel">
+        <div style="font-size:12px;color:var(--text-dim)">加载中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Watchdog Alerts -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">监控预警</span>
+      <button class="btn-outline" onclick="loadWatchdog()" style="padding:4px 10px;font-size:11px">&#8635; 刷新</button>
+    </div>
+    <div id="watchdog-panel">
+      <div class="empty-state" style="padding:16px 0"><span class="icon">&#128737;</span><br>暂无预警</div>
+    </div>
+  </div>
+
+  <!-- Data Table -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">详细数据</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>品种</th>
+            <th>信号</th>
+            <th>置信</th>
+            <th>当前价</th>
+            <th>支撑</th>
+            <th>阻力</th>
+            <th>ATR</th>
+            <th>目标</th>
+            <th>止损</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script src="/assets/ui-chips.js"></script>
+<script src="/assets/futures-picker.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   Quant Dashboard — Modern Dark Theme
+   ═══════════════════════════════════════════════════════════════ */
+
+var API = window.location.origin;
+var WS_URL = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws/prices';
+var allResults = [];
+var currentFilter = 'all';
+var wsConn = null;
+var wsSymbol = 'I';
+var priceHistory = {};
+var chartEquity = null;
+var chartSignals = null;
+var equityData = [];
+var maxEquityPoints = 80;
+
+/* ─── Clock ─── */
+function tickClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('zh-CN', {hour12:false});
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+/* ─── API Health ─── */
+function checkHealth() {
+  fetch(API + '/health').then(function(r){return r.json()}).then(function(d){
+    var b = document.getElementById('api-badge');
+    b.classList.remove('offline');
+    document.getElementById('api-text').textContent = '在线';
+  }).catch(function(){
+    var b = document.getElementById('api-badge');
+    b.classList.add('offline');
+    document.getElementById('api-text').textContent = '离线';
+  });
+}
+checkHealth();
+setInterval(checkHealth, 15000);
+
+/* ─── WebSocket ─── */
+function connectWS() {
+  try {
+    wsConn = new WebSocket(WS_URL + '?symbol=' + wsSymbol);
+    wsConn.onopen = function() {
+      document.getElementById('ws-badge').querySelector('.dot').classList.remove('offline');
+      document.getElementById('ws-status-text').textContent = wsSymbol + ' 实时';
+    };
+    wsConn.onmessage = function(evt) {
+      try {
+        var d = JSON.parse(evt.data);
+        if (d.type === 'price' && d.price) {
+          updateTicker(d.symbol || wsSymbol, d.price);
+          if (d.alerts) { renderWatchdogAlerts(d.alerts); }
+        }
+      } catch(e) {}
+    };
+    wsConn.onclose = function() {
+      document.getElementById('ws-badge').querySelector('.dot').classList.add('offline');
+      document.getElementById('ws-status-text').textContent = '断开';
+      setTimeout(connectWS, 5000);
+    };
+    wsConn.onerror = function() {};
+  } catch(e) {}
+}
+connectWS();
+
+/* ─── Live Ticker ─── */
+function updateTicker(sym, price) {
+  var bar = document.getElementById('ticker-bar');
+  var prev = priceHistory[sym];
+  priceHistory[sym] = price;
+  var el = document.getElementById('tick-' + sym);
+  if (!el) {
+    // Remove empty state
+    if (bar.querySelector('.empty-state')) bar.innerHTML = '';
+    el = document.createElement('div');
+    el.id = 'tick-' + sym;
+    el.className = 'ticker-item';
+    bar.prepend(el);
+  }
+  var dir = prev ? (price > prev ? 'up' : price < prev ? 'down' : '') : '';
+  el.className = 'ticker-item' + (dir ? ' flash-' + dir : '');
+  el.innerHTML = '<span class="t-sym">' + sym + '</span><span class="t-price val-' + (dir || 'flat') + '">' + fmt(price) + '</span>';
+  if (dir) setTimeout(function(){ el.classList.remove('flash-up','flash-down'); }, 600);
+}
+
+/* ─── Portfolio ─── */
+function loadPortfolio() {
+  fetch(API + '/portfolio').then(function(r){return r.json()}).then(function(d){
+    renderPositions(d.positions || []);
+    renderRiskPanel(d);
+    renderEquityChart(d);
+    renderPositionsSidebar(d.positions || []);
+  }).catch(function(){});
+}
+loadPortfolio();
+
+function renderPositions(positions) {
+  var panel = document.getElementById('positions-panel');
+  if (!positions.length) {
+    panel.innerHTML = '<div class="empty-state" style="padding:20px 0"><span class="icon">&#128176;</span><br>暂无持仓</div>';
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < positions.length; i++) {
+    var p = positions[i];
+    var pnl = p.pnl || 0;
+    var pnlClass = pnl > 0 ? 'val-up' : pnl < 0 ? 'val-down' : 'val-flat';
+    html += '<div class="pos-row">' +
+      '<span class="pos-sym">' + (p.symbol || p.name || '&mdash;') + '</span>' +
+      '<span>' + (p.qty || 0) + ' × ' + fmt(p.avg_price || 0) + '</span>' +
+      '<span class="pos-pnl ' + pnlClass + '">' + (pnl >= 0 ? '+' : '') + fmt(pnl) + '</span>' +
+      '</div>';
+  }
+  panel.innerHTML = html;
+}
+
+function renderPositionsSidebar(positions) {
+  var el = document.getElementById('pos-sidebar');
+  if (!positions.length) {
+    el.innerHTML = '<div class="empty-state" style="padding:16px 0"><span class="icon">&#128176;</span><br>暂无持仓</div>';
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < positions.length; i++) {
+    var p = positions[i];
+    var pnl = p.pnl || 0;
+    var cls = pnl > 0 ? 'val-up' : pnl < 0 ? 'val-down' : 'val-flat';
+    html += '<div class="pos-row"><span class="pos-sym">' + (p.symbol || p.name || '?') + '</span><span class="pos-pnl ' + cls + '">' + (pnl>=0?'+':'') + fmt(pnl) + '</span></div>';
+  }
+  el.innerHTML = html;
+}
+
+function renderRiskPanel(d) {
+  var el = document.getElementById('risk-panel');
+  var cash = d.cash || 0;
+  var equity = d.equity || 0;
+  var posCount = (d.positions || []).length;
+  var totalPnl = 0;
+  (d.positions || []).forEach(function(p){ totalPnl += (p.pnl || 0); });
+  var riskPct = equity > 0 ? Math.min(100, Math.abs(totalPnl / equity * 100)) : 0;
+  var riskColor = riskPct > 10 ? 'var(--red)' : riskPct > 5 ? 'var(--yellow)' : 'var(--green)';
+  el.innerHTML =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">' +
+      '<div><span style="color:var(--text-dim)">可用资金</span><br><strong>' + fmt(cash) + '</strong></div>' +
+      '<div><span style="color:var(--text-dim)">总权益</span><br><strong>' + fmt(equity) + '</strong></div>' +
+      '<div><span style="color:var(--text-dim)">持仓数</span><br><strong>' + posCount + '</strong></div>' +
+      '<div><span style="color:var(--text-dim)">浮动盈亏</span><br><strong class="' + (totalPnl>=0?'val-up':'val-down') + '">' + (totalPnl>=0?'+':'') + fmt(totalPnl) + '</strong></div>' +
+    '</div>' +
+    '<div style="margin-top:12px;font-size:11px;color:var(--text-dim)">风险敞口</div>' +
+    '<div class="risk-bar-bg"><div class="risk-bar-fill" style="width:' + riskPct + '%;background:' + riskColor + '"></div></div>';
+}
+
+/* ─── Watchdog ─── */
+function loadWatchdog() {
+  fetch(API + '/api/watchdog/events?limit=10').then(function(r){return r.json()}).then(function(d){
+    renderWatchdogPanel(d.events || []);
+  }).catch(function(){});
+}
+function renderWatchdogAlerts(alerts) {
+  if (!alerts || !alerts.length) return;
+  renderWatchdogPanel(alerts);
+}
+function renderWatchdogPanel(events) {
+  var el = document.getElementById('watchdog-panel');
+  if (!events.length) {
+    el.innerHTML = '<div class="empty-state" style="padding:16px 0"><span class="icon">&#128737;</span><br>暂无预警</div>';
+    return;
+  }
+  var html = '<div class="alert-list">';
+  for (var i = events.length - 1; i >= 0; i--) {
+    var e = events[i];
+    var level = (e.level || 'info').toLowerCase();
+    html += '<div class="alert-item ' + level + '">' +
+      '<strong>' + (e.title || 'Alert') + '</strong><br>' + (e.detail || e.message || '') +
+      '</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+loadWatchdog();
+
+/* ─── Charts ─── */
+function renderEquityChart(d) {
+  var ctx = document.getElementById('chart-equity').getContext('2d');
+  var equity = d.equity || 0;
+  equityData.push(equity);
+  if (equityData.length > maxEquityPoints) equityData.shift();
+
+  var labels = [];
+  for (var i = 0; i < equityData.length; i++) labels.push('');
+
+  if (chartEquity) {
+    chartEquity.data.labels = labels;
+    chartEquity.data.datasets[0].data = equityData;
+    chartEquity.update('none');
+    return;
+  }
+
+  chartEquity = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: equityData,
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59,130,246,0.08)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHitRadius: 10,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { display: false },
+        y: {
+          grid: { color: 'rgba(30,42,63,0.5)' },
+          ticks: { color: '#64748b', font: { size: 10 } },
+        }
+      },
+      animation: { duration: 300 }
+    }
+  });
+}
+
+function renderSignalChart() {
+  var ctx = document.getElementById('chart-signals').getContext('2d');
+  var long = allResults.filter(function(r){return r.signal==='LONG'}).length;
+  var short = allResults.filter(function(r){return r.signal==='SHORT'}).length;
+  var neutral = allResults.filter(function(r){return r.signal==='NEUTRAL'}).length;
+
+  if (chartSignals) {
+    chartSignals.data.datasets[0].data = [long, short, neutral];
+    chartSignals.update();
+    return;
+  }
+
+  chartSignals = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['做多', '做空', '观望'],
+      datasets: [{
+        data: [long, short, neutral],
+        backgroundColor: ['#22c55e', '#ef4444', '#f59e0b'],
+        borderWidth: 0,
+        hoverOffset: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '65%',
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: { color: '#94a3b8', font: { size: 12 }, padding: 12, usePointStyle: true, pointStyleWidth: 8 }
+        }
+      },
+      animation: { duration: 400 }
+    }
+  });
+}
+
+/* ─── Prediction Run ─── */
+function pickAndRun(preset) {
+  FuturesPicker.applyPreset(preset);
+  filterSignal('all');
+  run();
+}
+
+function run() {
+  var input = FuturesPicker.getCodesString();
+  if (!input) {
+    document.getElementById('status').innerHTML = '<span class="val-down">请至少选择 1 个期货品种</span>';
+    return;
+  }
+
+  var btn = document.getElementById('btn-run');
+  var status = document.getElementById('status');
+  var results = document.getElementById('results');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 预测中...';
+  status.textContent = '';
+  results.innerHTML = '<div class="empty-state"><span class="spinner" style="width:20px;height:20px;border-width:3px"></span><br>正在获取数据并运行预测...</div>';
+
+  var t0 = performance.now();
+  fetch(API + '/api/forecast/run?futures=' + encodeURIComponent(input))
+    .then(function(r){return r.json()}).then(function(d){
+      var elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+      btn.disabled = false;
+      btn.innerHTML = '&#9654; 运行预测';
+      status.innerHTML = '<span class="val-up">&#10003;</span> ' + elapsed + 's | ' + d.count + '品种';
+      allResults = d.results || [];
+      renderResults();
+      renderSignalList();
+      renderSignalChart();
+      // Connect WS to first result
+      if (allResults.length && wsSymbol !== allResults[0].symbol) {
+        wsSymbol = allResults[0].symbol;
+        if (wsConn) wsConn.close();
+        connectWS();
+      }
+    })
+    .catch(function(e){
+      btn.disabled = false;
+      btn.innerHTML = '&#9654; 重试';
+      status.innerHTML = '<span class="val-down">&#10007; ' + e.message + '</span>';
+      results.innerHTML = '<div class="empty-state" style="color:var(--red)"><span class="icon">&#9888;</span><br>' + e.message + '</div>';
+    });
+}
+
+/* ─── Direction filter (chip) ─── */
+function filterSignal(sig) {
+  currentFilter = sig;
+  renderResults();
+  renderSignalChart();
+  syncDirectionUI();
+  syncStatCardHighlight();
+}
+
+function filterByStat(sig) {
+  if (sig !== 'all') {
+    var n = allResults.filter(function (r) { return r.signal === sig; }).length;
+    if (!n) return;
+  }
+  filterSignal(sig);
+  ChipSelect.setValue('direction-chips', sig, true);
+}
+
+function syncDirectionUI() {
+  ChipSelect.setValue('direction-chips', currentFilter, true);
+}
+
+function syncStatCardHighlight() {
+  var filters = ['all', 'LONG', 'SHORT', 'NEUTRAL'];
+  var cards = document.querySelectorAll('.stat-card.clickable');
+  cards.forEach(function (c, i) {
+    c.classList.remove('active-filter', 'disabled-stat');
+    var f = filters[i];
+    var count = f === 'all'
+      ? allResults.length
+      : allResults.filter(function (r) { return r.signal === f; }).length;
+    if (f !== 'all' && !count) c.classList.add('disabled-stat');
+    if (f === currentFilter) c.classList.add('active-filter');
+  });
+}
+
+ChipSelect.mount('direction-chips', [
+  { value: 'all', label: '全部' },
+  { value: 'LONG', label: '做多 ↑', tone: 'long' },
+  { value: 'SHORT', label: '做空 ↓', tone: 'short' },
+  { value: 'NEUTRAL', label: '观望', tone: 'neutral' },
+], {
+  value: 'all',
+  compact: true,
+  onChange: filterSignal,
+});
+
+FuturesPicker.init(API, { defaultCodes: ['I', 'RB', 'SC', 'AU', 'AG'] });
+syncStatCardHighlight();
+
+/* ─── Render Results ─── */
+function renderResults() {
+  var box = document.getElementById('results');
+  var tbody = document.getElementById('tbody');
+  var filtered = currentFilter === 'all' ? allResults : allResults.filter(function(r){return r.signal===currentFilter});
+
+  var long = allResults.filter(function(r){return r.signal==='LONG'}).length;
+  var short = allResults.filter(function(r){return r.signal==='SHORT'}).length;
+  var neutral = allResults.filter(function(r){return r.signal==='NEUTRAL'}).length;
+  var avgConf = allResults.length ? allResults.reduce(function(a,r){return a+(r.confidence||0)},0)/allResults.length*100 : 0;
+
+  document.getElementById('stat-total').textContent = allResults.length;
+  document.getElementById('stat-long').textContent = long;
+  document.getElementById('stat-short').textContent = short;
+  document.getElementById('stat-neutral').textContent = neutral;
+  document.getElementById('stat-total-sub').textContent = allResults.length ? '平均置信 ' + avgConf.toFixed(0) + '%' : '--';
+  document.getElementById('stat-long-sub').textContent = long ? (long/allResults.length*100).toFixed(0) + '%' : '--';
+  document.getElementById('stat-short-sub').textContent = short ? (short/allResults.length*100).toFixed(0) + '%' : '--';
+  document.getElementById('stat-neutral-sub').textContent = neutral ? (neutral/allResults.length*100).toFixed(0) + '%' : '--';
+
+  syncStatCardHighlight();
+
+  if (!filtered.length) {
+    var dirLabel = { LONG: '做多', SHORT: '做空', NEUTRAL: '观望' }[currentFilter] || '';
+    var hint = currentFilter === 'all'
+      ? '暂无预测结果，请选择品种后运行预测'
+      : '当前批次无「' + dirLabel + '」方向品种，可切换筛选或调整选品';
+    box.innerHTML = '<div class="empty-state"><span class="icon">&#128269;</span><br>' + hint + '</div>';
+    tbody.innerHTML = '';
+    return;
+  }
+
+  var html = '';
+  var thtml = '';
+
+  for (var i = 0; i < filtered.length; i++) {
+    var r = filtered[i];
+    var sigName = {LONG:'做多',SHORT:'做空',NEUTRAL:'观望'}[r.signal] || r.signal;
+    var sigCls = {LONG:'long',SHORT:'short',NEUTRAL:'neutral'}[r.signal] || 'neutral';
+    var sigBadge = {LONG:'sig-long',SHORT:'sig-short',NEUTRAL:'sig-neutral'}[r.signal] || 'sig-neutral';
+
+    var support=0, resistance=0, atr=0;
+    for (var j=0; j<(r.steps||[]).length; j++) {
+      var s = r.steps[j];
+      if (s.name === '高低点分析' && s.data) {
+        support = s.data.nearest_support || 0;
+        resistance = s.data.nearest_resistance || 0;
+        atr = s.data.atr || 0;
+      }
+    }
+
+    var price = r.forecast_price || 0;
+    var target = r.take_profit || (r.signal==='LONG' ? resistance : r.signal==='SHORT' ? support : price);
+    var stop = r.stop_loss || 0;
+
+    html += '<div class="pred-card ' + sigCls + '">' +
+      '<div class="pred-head">' +
+        '<span class="pred-sym">' + r.symbol + '</span>' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+          '<span class="sig-badge ' + sigBadge + '">' + sigName + '</span>' +
+          '<span style="font-size:12px;color:var(--text-muted)">' + (r.confidence*100).toFixed(0) + '%</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="pred-price-grid">' +
+        '<div class="pred-price-item"><div class="pred-price-label">当前价</div><div class="pred-price-val">' + fmt(price) + '</div></div>' +
+        '<div class="pred-price-item"><div class="pred-price-label">支撑</div><div class="pred-price-val val-up">' + fmt(support) + '</div></div>' +
+        '<div class="pred-price-item"><div class="pred-price-label">阻力</div><div class="pred-price-val val-down">' + fmt(resistance) + '</div></div>' +
+        '<div class="pred-price-item"><div class="pred-price-label">目标</div><div class="pred-price-val">' + fmt(target) + '</div></div>' +
+        '<div class="pred-price-item"><div class="pred-price-label">止损</div><div class="pred-price-val val-down">' + fmt(stop) + '</div></div>' +
+      '</div>' +
+      (r.suggestion ? '<div class="suggestion-box">&#128161; ' + r.suggestion + '</div>' : '') +
+      '</div>';
+
+    thtml += '<tr>' +
+      '<td><strong>' + r.symbol + '</strong></td>' +
+      '<td><span class="sig-badge ' + sigBadge + '">' + sigName + '</span></td>' +
+      '<td>' + (r.confidence*100).toFixed(0) + '%</td>' +
+      '<td>' + fmt(price) + '</td>' +
+      '<td class="val-up">' + fmt(support) + '</td>' +
+      '<td class="val-down">' + fmt(resistance) + '</td>' +
+      '<td>' + fmt(atr) + '</td>' +
+      '<td>' + fmt(target) + '</td>' +
+      '<td class="val-down">' + fmt(stop) + '</td>' +
+      '</tr>';
+  }
+
+  box.innerHTML = html;
+  tbody.innerHTML = thtml;
+}
+
+/* ─── Signal List Sidebar ─── */
+function renderSignalList() {
+  var el = document.getElementById('signal-list');
+  var signals = allResults.filter(function(r){return r.signal !== 'NEUTRAL'});
+  if (!signals.length) {
+    el.innerHTML = '<div class="empty-state" style="padding:16px 0"><span class="icon">&#128203;</span><br>无操作信号</div>';
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < signals.length; i++) {
+    var r = signals[i];
+    var cls = r.signal === 'LONG' ? 'val-up' : 'val-down';
+    var icon = r.signal === 'LONG' ? '&#8593;' : '&#8595;';
+    html += '<div class="signal-mini"><span class="sym">' + r.symbol + ' <span class="' + cls + '">' + icon + '</span></span><span class="' + cls + '">' + (r.confidence*100).toFixed(0) + '%</span></div>';
+  }
+  el.innerHTML = html;
+}
+
+/* ─── Format ─── */
+function fmt(n) {
+  if (n === null || n === undefined || n === 0) return '--';
+  if (Math.abs(n) >= 10000) return (n/10000).toFixed(2) + '万';
+  return n.toLocaleString('zh-CN', {maximumFractionDigits: 2, minimumFractionDigits: 0});
+}
+</script>
+</body>
+</html>

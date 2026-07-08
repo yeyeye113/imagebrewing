@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="refresh" content="300" />
+<title>quant-trader 系统全景</title>
+<style>
+:root {
+  --bg: #080c14; --panel: #10172a; --border: #1a2744;
+  --text: #e2e6f2; --muted: #8892b0;
+  --green: #10b981; --red: #ef4444; --yellow: #f59e0b; --blue: #6366f1; --cyan: #06b6d4;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,'Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+h2{margin:0 0 12px;font-size:16px;display:flex;align-items:center;gap:8px}
+.muted{color:var(--muted)}
+.pulse{animation:pulse 2s infinite} @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+.flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 0}
+.step{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px 14px;text-align:center;min-width:80px}
+.step .icon{font-size:20px;display:block;margin-bottom:4px}
+.step .label{font-size:11px;color:var(--muted)}
+.step .val{font-size:13px;font-weight:600;margin-top:2px}
+.arrow{color:var(--muted);font-size:18px;margin:0 2px}
+
+.alert{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;margin:4px 0;font-size:13px}
+.alert-warn{background:rgba(245,158,11,.1);border-left:3px solid var(--yellow)}
+.alert-danger{background:rgba(239,68,68,.1);border-left:3px solid var(--red)}
+.alert-info{background:rgba(99,102,241,.1);border-left:3px solid var(--blue)}
+.alert-action{background:rgba(239,68,68,.15);border-left:3px solid var(--red);animation:pulse 1s infinite}
+
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:600}
+.badge-buy{background:rgba(16,185,129,.15);color:var(--green)}
+.badge-hold{background:rgba(245,158,11,.15);color:var(--yellow)}
+.badge-sell{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-neutral{background:rgba(136,146,176,.15);color:var(--muted)}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.stat-num{font-size:28px;font-weight:700}
+.stat-label{font-size:11px;color:var(--muted);margin-top:2px}
+
+.code{font-family:'Cascadia Code',Consolas,monospace;font-size:12px}
+hr{border:none;border-top:1px solid var(--border);margin:12px 0}
+</style>
+</head>
+<body class="p-3 md:p-5 max-w-6xl mx-auto">
+
+<header class="flex items-center justify-between flex-wrap gap-3 mb-4">
+  <div>
+    <h1 style="font-size:20px;margin:0">🏦 quant-trader · 系统全景</h1>
+    <span class="muted text-sm" id="clock">加载中...</span>
+  </div>
+  <div class="flex items-center gap-3">
+    <span class="badge" id="ws-dot" style="background:rgba(239,68,68,.2);color:#ef4444">● WebSocket</span>
+    <a href="/scanner" style="color:var(--blue);text-decoration:none;font-size:13px">📡 选股</a>
+    <a href="/docs" style="color:var(--muted);text-decoration:none;font-size:13px">API</a>
+  </div>
+</header>
+
+<!-- ═══════ 预测流程全景 ═══════ -->
+<div class="panel">
+  <h2>🔄 双轨预测流程</h2>
+  <div class="grid2">
+
+    <!-- 股票预测 -->
+    <div style="border-right:1px solid var(--border);padding-right:16px">
+      <h3 style="font-size:14px;margin:0 0 8px;color:var(--green)">📈 股票预测链路</h3>
+      <div class="flow">
+        <div class="step"><span class="icon">📈</span><span class="label">行情拉取</span><span class="val code">akshare</span></div>
+        <span class="arrow">→</span>
+        <div class="step"><span class="icon">📊</span><span class="label">技术分析</span><span class="val code">indicators</span></div>
+        <span class="arrow">→</span>
+        <div class="step"><span class="icon">🧠</span><span class="label">LLM研判</span><span class="val code">llm.py</span></div>
+        <span class="arrow">→</span>
+        <div class="step"><span class="icon">🛡️</span><span class="label">风控检查</span><span class="val code">risk.py</span></div>
+        <span class="arrow">→</span>
+        <div class="step"><span class="icon">🎯</span><span class="label">执行下单</span><span class="val code">broker</span></div>
+      </div>
+      <div class="muted text-sm" style="margin-top:8px">
+        触发: daemon 120s轮询 | 扫描: scanner/lite.py (Sina+技术面) | 盯盘: watchdog.py
+      </div>
+    </div>
+
+    <!-- 期货预测 -->
+    <div style="padding-left:16px">
+      <h3 style="font-size:14px;margin:0 0 8px;color:var(--cyan)">⛽ 期货预测链路</h3>
+      <div class="flow">
+        <div class="step"><span class="icon">🕐</span><span class="label">市场时钟</span><span class="val code">contracts</span></div>
+        <span class="arrow">→</span>
+        <div class="step"><span class="icon">📋</span><span class="label">合约筛选</span><span class="val code">52品种</span></div>
+        <span class="arrow">→</span>
+        <div class="step"><span class="icon">🔍</span><span class="label">多空扫描</span><span class="val code">scanner</span></div>
+        <span class="arrow">→</span>
+        <div class="step"><span class="icon">🧠</span><span class="label">LLM决策</span><span class="val code">strategy</span></div>
+        <span class="arrow">→</span>
+        <div class="step"><span class="icon">🛡️</span><span class="label">杠杆风控</span><span class="val code">risk.py</span></div>
+      </div>
+      <div class="muted text-sm" style="margin-top:8px">
+        6步流程: ①时钟→②合约→③行情→④Prompt→⑤风控→⑥建议 | 双向(多/空) | 夜盘感知
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════ 实时盯盘 + 异动 ═══════ -->
+<div class="panel">
+  <h2>👁️ 实时盯盘 <span class="muted text-sm">WebSocket 每秒推送</span></h2>
+  <div class="grid2">
+    <div>
+      <div class="stat-num" id="live-price" style="color:var(--green)">--</div>
+      <div class="stat-label">实时价格 (600519)</div>
+      <div id="alerts-container" style="margin-top:12px"></div>
+    </div>
+    <div>
+      <div class="grid3">
+        <div><div class="stat-num" id="stat-chg">--</div><div class="stat-label">日涨跌</div></div>
+        <div><div class="stat-num" id="stat-vol">--</div><div class="stat-label">量比</div></div>
+        <div><div class="stat-num" id="stat-ma">--</div><div class="stat-label">SMA20距</div></div>
+      </div>
+    </div>
+  </div>
+  <hr>
+  <div class="muted text-sm">
+    <strong>盯盘规则:</strong> 急涨急跌±3% | 放量>2x | 均线突破 | 连续3阳/阴 | 跳空±2% | 波动率>2x
+    &nbsp;|&nbsp; <strong>响应链:</strong> 异动检出 → 评级(info/watch/warn/action) → 推送通知 → LLM研判(action级)
+  </div>
+</div>
+
+<!-- ═══════ 完整命令速查 ═══════ -->
+<div class="panel">
+  <h2>⌨️ 命令速查</h2>
+  <div class="grid2">
+    <div>
+      <div class="code" style="color:var(--green)"># 股票</div>
+      <div class="code muted">python run.py --scan</div><div class="text-sm" style="margin-left:16px">扫描+LLM研判</div>
+      <div class="code muted">python run.py --once</div><div class="text-sm" style="margin-left:16px">单次LLM决策</div>
+      <div class="code muted">python run.py --daemon</div><div class="text-sm" style="margin-left:16px">全自动守护</div>
+      <div class="code muted">python run.py --status</div><div class="text-sm" style="margin-left:16px">查看状态+命中率</div>
+      <div class="code muted">python -m quanttrader backtest -c config.yaml</div><div class="text-sm" style="margin-left:16px">回测</div>
+    </div>
+    <div>
+      <div class="code" style="color:var(--cyan)"># 期货</div>
+      <div class="code muted">python run.py --futures</div><div class="text-sm" style="margin-left:16px">扫描+建议</div>
+      <div class="code muted">python -c "from quanttrader.futures.cli import main; main(['scan'])"</div><div class="text-sm" style="margin-left:16px">扫描</div>
+      <div class="code muted">python -c "from quanttrader.futures.cli import main; main(['risk'])"</div><div class="text-sm" style="margin-left:16px">风控参数</div>
+    </div>
+  </div>
+  <hr>
+  <div class="code" style="color:var(--blue)"># API + Web</div>
+  <div class="code muted">python -m uvicorn quanttrader.api.server:app --host 127.0.0.1 --port 8000</div>
+  <div class="text-sm" style="margin-left:16px">然后访问 <span style="color:var(--cyan)">http://127.0.0.1:8000</span></div>
+</div>
+
+<script>
+const API = 'http://127.0.0.1:8000';
+const WS = new WebSocket('ws://127.0.0.1:8000/ws/prices?symbol=600519&source=synthetic');
+
+// Clock
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toLocaleString('zh-CN');
+}, 1000);
+
+// WebSocket
+let prevPrice = 0;
+WS.onopen = () => {
+  document.getElementById('ws-dot').textContent = '● 在线';
+  document.getElementById('ws-dot').style.color = '#10b981';
+  document.getElementById('ws-dot').style.background = 'rgba(16,185,129,.2)';
+};
+WS.onclose = () => {
+  document.getElementById('ws-dot').textContent = '● 断开';
+  document.getElementById('ws-dot').style.color = '#ef4444';
+  document.getElementById('ws-dot').style.background = 'rgba(239,68,68,.2)';
+};
+WS.onmessage = (e) => {
+  const d = JSON.parse(e.data);
+  if (d.type === 'price' || d.price) {
+    const p = d.price;
+    document.getElementById('live-price').textContent = '¥' + p.toFixed(2);
+    if (prevPrice > 0) {
+      const chg = ((p / prevPrice - 1) * 100).toFixed(2);
+      document.getElementById('stat-chg').textContent = (chg > 0 ? '+' : '') + chg + '%';
+      document.getElementById('stat-chg').style.color = chg >= 0 ? '#10b981' : '#ef4444';
+    }
+    prevPrice = p;
+  }
+  if (d.alerts && d.alerts.length > 0) {
+    renderAlerts(d.alerts);
+  }
+};
+
+function renderAlerts(alerts) {
+  const c = document.getElementById('alerts-container');
+  c.innerHTML = alerts.map(a => {
+    const cls = 'alert alert-' + (a.level === 'action' ? 'action' : a.level === 'warn' ? 'warn' : a.level === 'watch' ? 'danger' : 'info');
+    const icon = {action:'🚨',warn:'⚠️',watch:'👀',info:'ℹ️'}[a.level] || '•';
+    return '<div class="' + cls + '"><span>' + icon + '</span><div><strong>' + a.title + '</strong><br><span class="muted" style="font-size:11px">' + a.detail + '</span></div></div>';
+  }).join('');
+}
+
+// Initial alert mock (demo)
+setTimeout(() => {
+  document.getElementById('alerts-container').innerHTML = [
+    '<div class="alert alert-info"><span>ℹ️</span><div>盯盘就绪 — 等待行情数据推送中</div></div>'
+  ].join('');
+}, 500);
+</script>
+
+</body>
+</html>

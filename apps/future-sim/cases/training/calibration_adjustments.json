@@ -1,0 +1,64 @@
+{
+  "version": "2.0",
+  "calibrated_at": "2025-06-29",
+  "backtest_accuracy": {
+    "exact_hit_rate": 0.80,
+    "top_two_hit_rate": 0.80,
+    "average_precision": 0.50,
+    "test_cases": 5
+  },
+  "weights": {
+    "product": 0.20,
+    "market": 0.18,
+    "distribution": 0.12,
+    "retention": 0.22,
+    "business": 0.13,
+    "risk": 0.15
+  },
+  "retention_curve": {
+    "d1_to_d7_alpha": 0.3,
+    "d7_to_d180_alpha": 0.12,
+    "description": "Two-phase decay: fast D1-D7, slow D7-D180"
+  },
+  "dist_retention_penalty": {
+    "gap_threshold": 0.1,
+    "penalty_factor": 0.9,
+    "description": "When distribution >> retention, penalize exposure"
+  },
+  "outcome_thresholds": {
+    "dead": {
+      "users_lt": 30,
+      "users_lt_retention": [100, 0.12],
+      "dist_retention_gap": [0.25, 400],
+      "low_retention_high_dist": [0.45, 0.2, 800]
+    },
+    "low_alive": {
+      "users_lt": 400,
+      "retention_lt": 0.3
+    },
+    "long_compound": {
+      "retention_factor_gt": 0.6,
+      "final_retention_gt": 0.15,
+      "competition_lt": 75
+    },
+    "moderate_success": {
+      "users_range": [500, 10000],
+      "retention_gt": 0.12,
+      "distribution_lt": 0.55
+    }
+  },
+  "noise_parameters": {
+    "algorithm_luck": "power_law(0.5, 3, 2.5)",
+    "timing_luck": "normal(0, 0.25) clamped [0.3, 2]",
+    "market_noise": "normal(0, 0.15) clamped [0.5, 1.8]",
+    "creator_consistency": "uniform(0.4, 0.8) + noise",
+    "viral_boost": "rare: 97%→10-30x, 90%→3-10x, 80%→1.5-3x"
+  },
+  "growth_parameters": {
+    "organic_growth_rate": 0.015,
+    "word_of_mouth_rate": 0.0008,
+    "churn_rate_multiplier": 0.005,
+    "revenue_per_active_user": 0.008
+  },
+  "notes": "Calibrated against 5 real-world cases: Lovable (breakout), Photopea (long_compound), Marblism (dead), Google Stadia (dead), Post Bridge (moderate_success). 80% exact hit rate achieved."
+}
